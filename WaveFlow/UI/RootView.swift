@@ -22,12 +22,13 @@ struct RootView: View {
     // d'albums en appuyant sur « Lecture » depuis un album.
     @State private var albumsPath = NavigationPath()
     @State private var artistsPath = NavigationPath()
+    @State private var searchPath = NavigationPath()
 
     @State private var showPlayer = false
     @State private var importing = false
     @State private var importReport: String?
 
-    private enum Tabs { case songs, albums, artists }
+    private enum Tabs { case songs, albums, artists, search }
 
     var body: some View {
         Group {
@@ -76,6 +77,12 @@ struct RootView: View {
             }
             Tab("Artistes", systemImage: "music.microphone", value: Tabs.artists) {
                 ArtistsScreen(path: $artistsPath)
+            }
+            // `role: .search` plutôt qu'un quatrième onglet ordinaire : iOS 26
+            // le détache des autres et le laisse se réduire en champ quand la
+            // barre se minimise au défilement.
+            Tab("Recherche", systemImage: "magnifyingglass", value: Tabs.search, role: .search) {
+                SearchScreen(path: $searchPath)
             }
         }
     }
