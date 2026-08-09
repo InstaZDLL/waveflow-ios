@@ -1,0 +1,54 @@
+name: Feature request
+description: Propose a concrete change to WaveFlow for iOS.
+labels: ["type: feat", "needs triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        If the idea is still taking shape, start a
+        [discussion](https://github.com/InstaZDLL/WaveFlow/discussions/categories/ideas)
+        instead — it can graduate to an issue once it's concrete.
+
+        Check the roadmap in the README first: playlists, search, and server
+        sync are already planned and don't need a new issue.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What can't you do today? Describe the situation, not the solution.
+      placeholder: |
+        With ~2000 tracks, scrolling the Titres tab to reach anything past "M"
+        takes forever.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you'd like instead
+      description: Be specific about the behaviour, not just the feature name.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: parity
+    attributes:
+      label: Does this exist in another WaveFlow client?
+      description: >-
+        The three clients are meant to stay coherent. If desktop or Android
+        already does it, matching their behaviour is usually the answer.
+      options:
+        - "No — iOS-specific"
+        - "Yes, on desktop"
+        - "Yes, on Android"
+        - "Yes, on both"
+        - "Not sure"
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+      description: Including "do nothing" — say why it isn't enough.

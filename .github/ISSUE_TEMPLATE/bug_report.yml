@@ -1,0 +1,80 @@
+name: Bug report
+description: Something behaves incorrectly in WaveFlow for iOS.
+labels: ["type: fix", "needs triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. A precise report gets fixed
+        much faster than a vague one.
+
+        **Security issue?** Don't file it here — see
+        [SECURITY.md](https://github.com/InstaZDLL/waveflow-ios/blob/main/.github/SECURITY.md).
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you saw, and what you expected instead.
+      placeholder: |
+        Tapping a track in an album plays the whole library instead of the album.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Numbered steps someone else can follow on a fresh install.
+      placeholder: |
+        1. Import 3 albums via Files
+        2. Open the Albums tab, tap the second album
+        3. Tap the third track
+        4. Open the full-screen player and skip forward
+    validations:
+      required: true
+
+  - type: input
+    id: ios-version
+    attributes:
+      label: iOS version
+      placeholder: "iOS 26.5"
+    validations:
+      required: true
+
+  - type: input
+    id: device
+    attributes:
+      label: Device
+      description: Model, or the simulator you used.
+      placeholder: "iPhone 15 Pro — or iPhone 17 Pro simulator"
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: WaveFlow version or commit
+      placeholder: "main @ a1b2c3d"
+    validations:
+      required: true
+
+  - type: textarea
+    id: files
+    attributes:
+      label: The files involved
+      description: >-
+        For anything touching the library, playback, or artwork, this is
+        usually the decisive detail. Container and codec (m4a/AAC, mp3, FLAC…),
+        and which tags are present — an album splitting apart almost always
+        means a missing `albumArtist`. `mediainfo` or Get Info in the Finder
+        will tell you.
+      placeholder: |
+        7 × m4a/AAC ripped from Apple Music. Tags: title, artist, album, artwork.
+        No albumArtist tag.
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Screenshots, screen recordings, or logs
+      description: Drag files in directly. Console output from Xcode helps a lot for crashes.

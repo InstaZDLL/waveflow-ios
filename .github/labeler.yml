@@ -1,0 +1,47 @@
+# Étiquettes basées sur les chemins, pour actions/labeler.
+# Les scopes reflètent le découpage annoncé dans le README.
+
+"scope: model":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "WaveFlow/Model/**"
+
+"scope: data":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "WaveFlow/Data/**"
+
+"scope: playback":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "WaveFlow/Playback/**"
+
+"scope: ui":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "WaveFlow/UI/**"
+          - "WaveFlow/Assets.xcassets/**"
+
+"scope: project":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "WaveFlow.xcodeproj/**"
+          - "WaveFlow/Info.plist"
+
+"scope: tests":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "WaveFlowTests/**"
+          - "WaveFlowUITests/**"
+
+"scope: ci":
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/workflows/**"
+          - ".github/dependabot.yml"
+          - ".github/labeler.yml"
+
+"scope: docs":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/*.md"

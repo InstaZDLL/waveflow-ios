@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+# Cancel in-progress runs for the same PR or branch when a new commit lands.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: Build & test
+    # iOS builds need a macOS runner — no cross-compilation, and the iOS SDK
+    # only ships inside Xcode. These slots bill at 10× the Linux rate, so this
+    # workflow stays a single job rather than a matrix.
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      # Runner images ship several Xcode versions and the default is not
+      # always the newest. The project targets iOS 26, so pick the highest
+      # version installed rather than pinning a path that rots at every image
+      # refresh.
+      - name: Select the newest Xcode
+        run: |
+          set -euo pipefail
+          latest=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          echo "Using $latest"
+          sudo xcode-select -s "$latest"
+          xcodebuild -version
+
+      # `xcodebuild test` needs a concrete device, and simulator names drift
+      # between runner images (iPhone 16 Pro → 17 Pro → …). Resolve one at
+      # runtime instead of hard-coding a name that breaks silently.
+      - name: Pick an iOS simulator
+        id: sim
+        run: |
+          set -euo pipefail
+          udid=$(xcrun simctl list devices available --json | python3 -c '
+          import json, sys
+
+          runtimes = json.load(sys.stdin)["devices"]
+          ios = {rt: devs for rt, devs in runtimes.items() if "iOS" in rt and devs}
+          if not ios:
+              sys.exit("Aucun runtime iOS disponible sur ce runner")
+
+          # Les identifiants finissent par la version (…SimRuntime.iOS-26-5) :
+          # un tri lexicographique suffit à prendre la plus récente.
+          newest = sorted(ios)[-1]
+          iphones = [d for d in ios[newest] if d["name"].startswith("iPhone")]
+          if not iphones:
+              sys.exit(f"Aucun iPhone disponible pour {newest}")
+
+          print(sorted(iphones, key=lambda d: d["name"])[-1]["udid"])
+          ')
+          echo "Simulateur : $udid"
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+
+      # Les tests UI lancent l'app et démarrent le simulateur : plusieurs
+      # minutes pour ce que les tests unitaires couvrent déjà. Ils restent
+      # exécutables à la main depuis Xcode.
+      - name: Build & test
+        run: |
+          xcodebuild test \
+            -project WaveFlow.xcodeproj \
+            -scheme WaveFlow \
+            -destination "id=${{ steps.sim.outputs.udid }}" \
+            -skip-testing:WaveFlowUITests \
+            -resultBundlePath TestResults.xcresult
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: test-results
+          path: TestResults.xcresult
+          retention-days: 7

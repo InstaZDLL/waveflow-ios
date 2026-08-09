@@ -1,0 +1,24 @@
+version: 2
+
+updates:
+  # Seul écosystème présent aujourd'hui : le projet n'a aucune dépendance
+  # tierce, tout vient des frameworks du système. Ajouter un bloc
+  # `package-ecosystem: swift` le jour où un `Package.resolved` apparaît —
+  # déclaré à vide, Dependabot signalerait un manifeste introuvable.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:15"
+      timezone: Europe/Zurich
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
+      - github-actions
+    commit-message:
+      prefix: chore
+    groups:
+      github-actions-all:
+        patterns:
+          - "*"
