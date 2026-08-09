@@ -1,0 +1,40 @@
+# Xcode — build et produits
+build/
+DerivedData/
+*.ipa
+*.dSYM
+*.dSYM.zip
+*.hmap
+*.moved-aside
+
+# Xcode — état par utilisateur (dispositions de fenêtres, breakpoints,
+# derniers schémas ouverts). Les schémas *partagés* vivent dans
+# xcshareddata/ et sont, eux, versionnés.
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+*.xccheckout
+
+# Swift Package Manager
+.build/
+.swiftpm/xcode/package.xcworkspace/xcuserdata/
+Packages/
+
+# CocoaPods / Carthage — non utilisés aujourd'hui, listés pour éviter un
+# commit accidentel si une dépendance en amène un jour.
+Pods/
+Carthage/Build/
+
+# Signature et secrets — ne doivent jamais entrer dans le repo.
+*.mobileprovision
+*.p12
+*.certSigningRequest
+*.p8
+
+# Fastlane
+fastlane/report.xml
+fastlane/screenshots/**/*.png
+fastlane/test_output/
+
+# macOS
+.DS_Store

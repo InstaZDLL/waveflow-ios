@@ -1,0 +1,24 @@
+# Normalise line endings: LF in the repo for all text files.
+* text=auto eol=lf
+
+# Xcode project file. Généré par Xcode, donc exclu des statistiques de langage
+# et du diff par défaut. Pas de `merge=union` : une fusion ligne à ligne peut
+# produire un pbxproj syntaxiquement invalide sans que Git s'en aperçoive. Les
+# groupes synchronisés d'Xcode 16+ rendent les conflits rares — quand il y en a
+# un, on le résout à la main ou on régénère.
+*.pbxproj text eol=lf linguist-generated=true
+*.xcworkspacedata text eol=lf
+*.xcscheme text eol=lf
+
+# Binary assets — never touch line endings.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.pdf binary
+*.mp3 binary
+*.m4a binary
+*.flac binary
+*.wav binary
+*.aiff binary
+*.xcassets/**/*.json text eol=lf

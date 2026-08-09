@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Lecture en arrière-plan et depuis l'écran verrouillé. Sans cette clé,
+	     iOS coupe le son dès que l'app quitte le premier plan — c'est
+	     l'équivalent du MediaSessionService d'Android. -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
+
+	<!-- Expose le dossier Documents dans l'app Fichiers, sous
+	     « Sur mon iPhone → WaveFlow » : c'est ainsi que l'utilisateur dépose
+	     sa musique sans passer par le sélecteur de l'app. -->
+	<key>UIFileSharingEnabled</key>
+	<true/>
+
+	<!-- Les fichiers déposés sont modifiables sur place plutôt que copiés
+	     dans une zone d'échange. -->
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
+</dict>
+</plist>
