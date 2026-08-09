@@ -114,12 +114,28 @@ xcodebuild test -project WaveFlow.xcodeproj -scheme WaveFlow \
   -skip-testing:WaveFlowUITests
 ```
 
-> The suite is currently the Xcode-generated placeholder — there are no real
-> tests yet. Porting the Android ones (`GroupingTest`, `DurationFormatTest`,
-> and a scanner test over a temporary folder) is the first thing on the list.
+Swift Testing, three suites: `GroupingTests` and `DurationFormatTests` (ported
+from Android), plus `TagNormalizationTests` for the tag helpers the grouping
+identifiers are built on. Still missing: a `LibraryScanner` test over a
+temporary folder — that one needs AVFoundation, so it needs a Mac.
 
 CI runs the same command on every push and pull request, resolving the Xcode
 version and the simulator at runtime so runner image updates don't break it.
+
+### Without a Mac
+
+Everything that only depends on Foundation — all of `Model/`, plus `AppPaths`,
+`MusicRepository`, `DurationFormat` and `Labels` — builds and runs on Linux with
+a plain Swift toolchain. `Tools/LinuxHarness` is a SwiftPM package whose sources
+are relative symlinks into the repo, so the whole test suite runs there:
+
+```bash
+cd Tools/LinuxHarness && swift test
+```
+
+It never builds the app, and Xcode ignores it — `Tools/` sits outside the
+synchronized `WaveFlow/` group. SwiftUI, AVFoundation, MediaPlayer, UIKit and
+CryptoKit are absent on Linux; anything touching those is left to CI.
 
 ## Roadmap
 
@@ -128,7 +144,8 @@ version and the simulator at runtime so runner image updates don't break it.
 - [x] Full-screen player (seek, shuffle, repeat, artwork-tinted background)
 - [x] Album / artist browsing
 - [x] Background playback + lock-screen controls
-- [ ] Tests
+- [x] Tests for grouping, duration formatting and tag normalisation
+- [ ] Scanner test over a temporary folder
 - [ ] Local playlists (SwiftData): create, rename, delete, add / remove tracks
 - [ ] Search
 - [ ] Drag-to-reorder inside a playlist
