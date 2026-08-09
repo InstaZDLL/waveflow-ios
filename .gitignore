@@ -15,10 +15,19 @@ xcuserdata/
 *.xcscmblueprint
 *.xccheckout
 
-# Swift Package Manager
+# Playgrounds
+timeline.xctimeline
+playground.xcworkspace
+*.playground/build/
+
+# Swift Package Manager — utilisé uniquement par le harnais de test Linux
+# (Tools/LinuxHarness) : le projet lui-même n'a aucune dépendance externe.
+# `Package.resolved` reste versionné, il n'y a rien à y verrouiller aujourd'hui
+# mais il fixera les versions le jour où une dépendance arrive.
 .build/
-.swiftpm/xcode/package.xcworkspace/xcuserdata/
+.swiftpm/
 Packages/
+Package.pins
 
 # CocoaPods / Carthage — non utilisés aujourd'hui, listés pour éviter un
 # commit accidentel si une dépendance en amène un jour.
@@ -31,10 +40,18 @@ Carthage/Build/
 *.certSigningRequest
 *.p8
 
-# Fastlane
+# Fastlane — les captures sont régénérables, elles n'ont pas à peser dans
+# l'historique.
 fastlane/report.xml
+fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output/
 
+# Résultats de tests — produits par `xcodebuild -resultBundlePath`, et publiés
+# comme artefact par la CI en cas d'échec.
+*.xcresult
+
 # macOS
 .DS_Store
+.AppleDouble
+._*

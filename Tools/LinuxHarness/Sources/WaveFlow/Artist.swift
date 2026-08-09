@@ -1,0 +1,1 @@
+../../../../WaveFlow/Model/Artist.swift
