@@ -44,7 +44,8 @@ WaveFlow/
 │  ├─ Library.swift         Loaded library; derived views computed once
 │  ├─ Grouping.swift        [Song] → albums / artists
 │  ├─ Search.swift          In-memory filtering, prefix matches first
-│  └─ Playlist.swift        Local playlist, order held by the array itself
+│  ├─ Playlist.swift        Local playlist, order held by the array itself
+│  └─ PlaybackQueue.swift   Traversal order, shuffle, repeat — no AVFoundation
 ├─ Data/
 │  ├─ AppPaths.swift                 Documents + artwork cache locations
 │  ├─ MusicRepository.swift          Library abstraction (AsyncThrowingStream)
@@ -53,7 +54,7 @@ WaveFlow/
 │  ├─ LibraryStore.swift             App-scoped library, loaded once
 │  └─ MusicImporter.swift            Document picker → Documents
 ├─ Playback/
-│  └─ PlaybackController.swift  Queue, AVPlayer, Now Playing, remote commands
+│  └─ PlaybackController.swift  AVPlayer, Now Playing, remote commands
 └─ UI/
    ├─ RootView.swift          Tabs + mini player + full-screen player
    ├─ Theme.swift             Emerald palette
@@ -87,7 +88,7 @@ the pieces that needed a real translation rather than a line-by-line port:
 | `MediaStore` query | `Documents` scan + `AVURLAsset` metadata |
 | `ContentObserver` | `DispatchSource` on the folder, 600 ms debounce |
 | Media3 `MediaSessionService` | `UIBackgroundModes: audio` + Now Playing fed by hand |
-| ExoPlayer queue | Queue held by `PlaybackController` — `AVQueuePlayer` doesn't expose the traversal order that shuffle, repeat and *previous* need |
+| ExoPlayer queue | `PlaybackQueue`, a plain value type — `AVQueuePlayer` doesn't expose the traversal order that shuffle, repeat and *previous* need |
 | Coil | `AsyncImage` over an on-disk artwork cache, one file per album |
 | `Palette` | 1×1 downsample of the cover, saturation boosted and brightness clamped |
 | ViewModels + `StateFlow` | `@Observable` classes on the main actor |
@@ -117,11 +118,13 @@ xcodebuild test -project WaveFlow.xcodeproj -scheme WaveFlow \
   -skip-testing:WaveFlowUITests
 ```
 
-Swift Testing, five suites: `GroupingTests`, `DurationFormatTests`,
+Swift Testing, six suites: `GroupingTests`, `DurationFormatTests`,
 `SearchTests` and `PlaylistTests` (ported from Android), plus
 `TagNormalizationTests` for the tag helpers the grouping identifiers are built
-on. Still missing: a `LibraryScanner` test over a temporary folder — that one
-needs AVFoundation, so it needs a Mac.
+on, and `PlaybackQueueTests` for the traversal order — that one has no Android
+counterpart, where the queue belongs to ExoPlayer. Still missing: a
+`LibraryScanner` test over a temporary folder — that one needs AVFoundation, so
+it needs a Mac.
 
 CI runs the same command on every push and pull request, resolving the Xcode
 version and the simulator at runtime so runner image updates don't break it.
