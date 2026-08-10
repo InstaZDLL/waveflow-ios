@@ -2,28 +2,6 @@ import AVFoundation
 import MediaPlayer
 import UIKit
 
-/// Mode de répétition, indépendant des constantes d'`AVFoundation`.
-nonisolated enum RepeatMode: Sendable, CaseIterable {
-
-    /// La file se termine après le dernier morceau.
-    case off
-
-    /// La file reboucle au début.
-    case all
-
-    /// Le morceau courant se répète.
-    case one
-
-    /// Off → All → One → Off.
-    var next: RepeatMode {
-        switch self {
-        case .off: .all
-        case .all: .one
-        case .one: .off
-        }
-    }
-}
-
 /// Façade de la lecture audio.
 ///
 /// Android délègue à un `MediaSessionService` Media3, qui apporte la lecture
@@ -32,26 +10,28 @@ nonisolated enum RepeatMode: Sendable, CaseIterable {
 /// et il faut alimenter `MPNowPlayingInfoCenter` et `MPRemoteCommandCenter` à
 /// la main — ce que cette classe centralise.
 ///
-/// La file est tenue ici plutôt que confiée à un `AVQueuePlayer` : aléatoire,
-/// répétition et « précédent » demandent de contrôler l'ordre de traversée, ce
-/// que la file interne d'`AVQueuePlayer` ne permet pas.
+/// L'ordre de traversée n'est pas confié à un `AVQueuePlayer`, qui ne l'expose
+/// pas : il vit dans [PlaybackQueue], du domaine pur, et cette classe se limite
+/// à exécuter les intentions qu'elle rend.
 @Observable
 @MainActor
 final class PlaybackController {
 
     // MARK: - État observable
 
-    private(set) var queue: [Song] = []
     private(set) var isPlaying = false
     private(set) var position: TimeInterval = 0
     private(set) var duration: TimeInterval = 0
-    private(set) var shuffleEnabled = false
-    private(set) var repeatMode: RepeatMode = .off
 
-    var currentSong: Song? {
-        guard let index = currentQueueIndex, queue.indices.contains(index) else { return nil }
-        return queue[index]
-    }
+    /// Toute la décision de file — ordre, aléatoire, répétition — est déléguée
+    /// ici. Les propriétés ci-dessous ne font que la relayer aux vues, qui
+    /// n'ont pas à connaître ce type.
+    private var playbackQueue = PlaybackQueue()
+
+    var queue: [Song] { playbackQueue.songs }
+    var shuffleEnabled: Bool { playbackQueue.shuffleEnabled }
+    var repeatMode: RepeatMode { playbackQueue.repeatMode }
+    var currentSong: Song? { playbackQueue.current }
 
     /// Avancement dans le morceau, entre 0 et 1 (0 si la durée est inconnue).
     var progress: Double {
@@ -62,18 +42,6 @@ final class PlaybackController {
     // MARK: - Interne
 
     private let player = AVPlayer()
-
-    /// Ordre de traversée : des index dans `queue`. En lecture normale c'est
-    /// `0..<queue.count`, en aléatoire une permutation.
-    private var order: [Int] = []
-
-    /// Position courante *dans `order`*, pas dans `queue`.
-    private var orderPosition: Int?
-
-    private var currentQueueIndex: Int? {
-        guard let orderPosition, order.indices.contains(orderPosition) else { return nil }
-        return order[orderPosition]
-    }
 
     // Plomberie, pas de l'état d'affichage : `@ObservationIgnored` leur évite
     // d'invalider les vues, et les laisse stockées — `@Observable` transforme
@@ -86,10 +54,6 @@ final class PlaybackController {
     @ObservationIgnored private nonisolated(unsafe) var timeObserver: Any?
     @ObservationIgnored private nonisolated(unsafe) var statusObservation: NSKeyValueObservation?
     @ObservationIgnored private nonisolated(unsafe) var endObserver: NSObjectProtocol?
-
-    /// Un « précédent » en deçà de ce seuil revient au morceau d'avant ;
-    /// au-delà, il rembobine le morceau courant. Convention iOS habituelle.
-    private let restartThreshold: TimeInterval = 3
 
     init() {
         configureAudioSession()
@@ -108,31 +72,31 @@ final class PlaybackController {
 
     /// Charge [songs] comme file d'attente et démarre à [startIndex].
     func play(_ songs: [Song], startIndex: Int) {
-        guard songs.indices.contains(startIndex) else { return }
-        queue = songs
-        rebuildOrder(startingAt: startIndex)
+        guard playbackQueue.load(songs, startingAt: startIndex) else { return }
         loadCurrent(autoplay: true)
     }
 
-    /// Démarre [song] avec [queue] comme file — la bibliothèque entière depuis
+    /// Démarre [song] avec [songs] comme file — la bibliothèque entière depuis
     /// l'onglet Titres, l'album ou l'artiste depuis leur écran.
     func play(_ song: Song, in songs: [Song]) {
-        guard let index = songs.firstIndex(where: { $0.id == song.id }) else { return }
-        play(songs, startIndex: index)
+        guard playbackQueue.load(songs, startingAt: song) else { return }
+        loadCurrent(autoplay: true)
     }
 
     /// Démarre [songs] par son premier morceau. Sans effet si la file est vide.
     func playFirst(_ songs: [Song]) {
-        guard let first = songs.first else { return }
-        play(first, in: songs)
+        play(songs, startIndex: 0)
     }
 
     /// Charge [songs] en activant l'aléatoire et démarre sur un morceau au hasard.
+    ///
+    /// Le tirage est fait ici : la file reste déterministe, donc testable, et
+    /// le hasard ne vit qu'au bord.
     func playShuffled(_ songs: [Song]) {
-        guard !songs.isEmpty else { return }
-        shuffleEnabled = true
-        queue = songs
-        rebuildOrder(startingAt: Int.random(in: songs.indices))
+        guard !songs.isEmpty,
+              playbackQueue.loadShuffled(songs, startingAt: Int.random(in: songs.indices))
+        else { return }
+
         loadCurrent(autoplay: true)
     }
 
@@ -147,15 +111,9 @@ final class PlaybackController {
         updateNowPlayingPlaybackState()
     }
 
-    func skipNext() { advance(by: 1, userInitiated: true) }
+    func skipNext() { apply(playbackQueue.next(userInitiated: true)) }
 
-    func skipPrevious() {
-        if position > restartThreshold {
-            seek(to: 0)
-            return
-        }
-        advance(by: -1, userInitiated: true)
-    }
+    func skipPrevious() { apply(playbackQueue.previous(elapsed: position)) }
 
     func seek(to seconds: TimeInterval) {
         let clamped = duration > 0 ? min(max(seconds, 0), duration) : max(seconds, 0)
@@ -169,62 +127,34 @@ final class PlaybackController {
         updateNowPlayingPlaybackState()
     }
 
-    func toggleShuffle() {
-        shuffleEnabled.toggle()
-        guard let index = currentQueueIndex else { return }
-        // Rebâtir autour du morceau courant : basculer l'aléatoire ne doit
-        // jamais interrompre ce qui joue.
-        rebuildOrder(startingAt: index)
-    }
+    func toggleShuffle() { playbackQueue.toggleShuffle() }
 
-    func cycleRepeatMode() { repeatMode = repeatMode.next }
+    func cycleRepeatMode() { playbackQueue.cycleRepeatMode() }
 
     // MARK: - File d'attente
 
-    private func rebuildOrder(startingAt queueIndex: Int) {
-        if shuffleEnabled {
-            var rest = Array(queue.indices)
-            rest.remove(at: queueIndex)
-            order = [queueIndex] + rest.shuffled()
-            orderPosition = 0
-        } else {
-            order = Array(queue.indices)
-            orderPosition = queueIndex
-        }
-    }
-
-    /// Avance de [step] dans l'ordre de traversée.
+    /// Exécute l'intention rendue par la file.
     ///
-    /// - Parameter userInitiated: un appui sur « suivant » ignore le mode
-    ///   « répéter le morceau » — sinon le bouton ne ferait rien. La fin
-    ///   naturelle d'un morceau, elle, le respecte.
-    private func advance(by step: Int, userInitiated: Bool) {
-        guard let orderPosition, !order.isEmpty else { return }
+    /// C'est le seul endroit qui traduit une décision de file en commandes
+    /// `AVPlayer` — la file, elle, ne connaît pas le lecteur.
+    private func apply(_ step: PlaybackStep?) {
+        switch step {
+        case .play:
+            loadCurrent(autoplay: true)
 
-        if repeatMode == .one && !userInitiated {
+        case .restart:
             seek(to: 0)
             player.play()
-            return
-        }
 
-        let target = orderPosition + step
-        switch target {
-        case order.indices:
-            self.orderPosition = target
-            loadCurrent(autoplay: true)
-
-        case _ where repeatMode == .all:
-            self.orderPosition = target < 0 ? order.count - 1 : 0
-            loadCurrent(autoplay: true)
-
-        case _ where target < 0:
-            // Avant le premier morceau sans répétition : on rembobine.
+        case .rewind:
             seek(to: 0)
 
-        default:
-            // Fin de file sans répétition : on s'arrête sur le dernier morceau.
+        case .stop:
             player.pause()
             seek(to: 0)
+
+        case nil:
+            break
         }
     }
 
@@ -275,7 +205,12 @@ final class PlaybackController {
             object: nil,
             queue: .main,
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.advance(by: 1, userInitiated: false) }
+            // Fin naturelle du morceau : `userInitiated: false` laisse le mode
+            // « répéter le morceau » s'appliquer, contrairement au bouton.
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.apply(self.playbackQueue.next(userInitiated: false))
+            }
         }
     }
 
