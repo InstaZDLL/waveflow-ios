@@ -16,13 +16,14 @@ struct PlaylistTests {
 
     // MARK: - Ajout et retrait
 
-    @Test func lOrdreDAjoutEstConserve() {
+    @Test func lAjoutConserveLOrdreEtDateLaModification() {
         var playlist = nouvellePlaylist()
         playlist.add("a", at: modification)
         playlist.add("b", at: modification)
         playlist.add("c", at: modification)
 
         #expect(playlist.songIds == ["a", "b", "c"])
+        #expect(playlist.updatedAt == modification)
     }
 
     @Test func unMorceauAjouteDeuxFoisNeCreeQuUneEntree() {
