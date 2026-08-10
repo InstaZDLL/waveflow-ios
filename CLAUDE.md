@@ -20,7 +20,9 @@ Concrètement : tout `WaveFlow/Model/`, plus `AppPaths`, `MusicRepository`, `Dur
 tests prioritaires du README (`Grouping`, `DurationFormat`) — ils peuvent être écrits et vérifiés
 sans Mac.
 
-Restent hors de portée : `LibraryScanner` (AVFoundation + CryptoKit), `Playback/`, tout `UI/` sauf
+Restent hors de portée : `LibraryScanner` (AVFoundation + CryptoKit), `PlaybackController` — mais
+plus la file de lecture, extraite dans `Model/PlaybackQueue.swift` justement pour être vérifiable
+ici —, tout `UI/` sauf
 les deux helpers ci-dessus, `MusicImporter` (`startAccessingSecurityScopedResource` n'existe pas
 dans swift-corelibs-foundation), et `LibraryStore` (`@Observable` exige un `import Observation`
 explicite hors iOS, où SwiftUI le réexporte). Pour ces fichiers : relire attentivement, ne jamais
@@ -135,9 +137,13 @@ jamais ce réglage du `.pbxproj`, tout le code en dépend.
 - *Scan borné* — `LibraryScanner` maintient une fenêtre de 6 `AVURLAsset` ouverts au plus (les
   descripteurs de fichiers sont finis). `DocumentsMusicRepository` sérialise les scans sous `NSLock`
   et rejoue un scan différé plutôt que d'en lancer deux en parallèle (résultats dans le désordre).
-- *File de lecture tenue à la main* — `PlaybackController` garde `queue` + un tableau `order` (ordre
+- *File de lecture tenue à la main* — `PlaybackQueue` garde les morceaux + un tableau `order` (ordre
   de traversée, permuté en aléatoire) plutôt qu'un `AVQueuePlayer`, qui n'expose pas l'ordre dont
-  aléatoire / répétition / « précédent » ont besoin. Pas de `MediaSessionService` ici :
+  aléatoire / répétition / « précédent » ont besoin. C'est une `struct` du domaine, sans
+  AVFoundation : elle ne joue rien, elle rend un `PlaybackStep` que `PlaybackController` traduit en
+  commandes — c'est ce qui la rend testable sans simulateur. Le tirage aléatoire du morceau de
+  départ reste chez l'appelant (`playShuffled`) pour que la file demeure déterministe.
+  Pas de `MediaSessionService` ici :
   `UIBackgroundModes: audio` maintient l'app en vie et `MPNowPlayingInfoCenter` /
   `MPRemoteCommandCenter` sont alimentés à la main — ils doivent rester cohérents avec l'état réel du
   lecteur après chaque commande.
@@ -171,10 +177,10 @@ Cible de déploiement iOS 26.5 ; le code utilise des API iOS 26 (`tabViewBottomA
 
 ## Tests
 
-Swift Testing (`@Test` / `#expect`), dans `WaveFlowTests/`. Cinq suites, toutes exécutables depuis
+Swift Testing (`@Test` / `#expect`), dans `WaveFlowTests/`. Six suites, toutes exécutables depuis
 Linux : `GroupingTests`, `DurationFormatTests`, `SearchTests`, `PlaylistTests`,
 `TagNormalizationTests` (les helpers de `Song.swift` sur lesquels reposent les identifiants de
-regroupement).
+regroupement) et `PlaybackQueueTests` (ordre de traversée, aléatoire, répétition).
 
 Reste à écrire : un test de `LibraryScanner` sur une arborescence temporaire — il exige un Mac
 (AVFoundation) et des fichiers audio de fixture. Un test ne doit dépendre ni d'un vrai fichier audio
