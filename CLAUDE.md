@@ -169,9 +169,10 @@ Cible de déploiement iOS 26.5 ; le code utilise des API iOS 26 (`tabViewBottomA
 
 ## Tests
 
-Swift Testing (`@Test` / `#expect`), dans `WaveFlowTests/`. Quatre suites, toutes exécutables depuis
-Linux : `GroupingTests`, `DurationFormatTests`, `SearchTests`, `TagNormalizationTests` (les helpers
-de `Song.swift` sur lesquels reposent les identifiants de regroupement).
+Swift Testing (`@Test` / `#expect`), dans `WaveFlowTests/`. Cinq suites, toutes exécutables depuis
+Linux : `GroupingTests`, `DurationFormatTests`, `SearchTests`, `PlaylistTests`,
+`TagNormalizationTests` (les helpers de `Song.swift` sur lesquels reposent les identifiants de
+regroupement).
 
 Reste à écrire : un test de `LibraryScanner` sur une arborescence temporaire — il exige un Mac
 (AVFoundation) et des fichiers audio de fixture. Un test ne doit dépendre ni d'un vrai fichier audio
