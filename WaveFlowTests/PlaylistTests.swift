@@ -131,6 +131,17 @@ struct PlaylistTests {
         #expect(playlist.updatedAt == creation)
     }
 
+    /// Verrouille l'ordre des deux opérations de `rename` : le nom est
+    /// débarrassé de ses espaces *avant* d'être comparé. Comparer le nom brut
+    /// daterait une modification qui n'en est pas une.
+    @Test func renamingToTheSameTrimmedNameLeavesUpdatedAtUntouched() {
+        var playlist = makePlaylist(name: "Été")
+        playlist.rename(to: "  Été  ", at: modification)
+
+        #expect(playlist.name == "Été")
+        #expect(playlist.updatedAt == creation)
+    }
+
     @Test func aBlankNameIsRejected() {
         var playlist = makePlaylist(name: "Été")
         playlist.rename(to: "   ", at: modification)
