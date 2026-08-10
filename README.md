@@ -43,7 +43,8 @@ WaveFlow/
 │  ├─ Album.swift / Artist.swift  Derived from the song list
 │  ├─ Library.swift         Loaded library; derived views computed once
 │  ├─ Grouping.swift        [Song] → albums / artists
-│  └─ Search.swift          In-memory filtering, prefix matches first
+│  ├─ Search.swift          In-memory filtering, prefix matches first
+│  └─ Playlist.swift        Local playlist, order held by the array itself
 ├─ Data/
 │  ├─ AppPaths.swift                 Documents + artwork cache locations
 │  ├─ MusicRepository.swift          Library abstraction (AsyncThrowingStream)
@@ -116,11 +117,11 @@ xcodebuild test -project WaveFlow.xcodeproj -scheme WaveFlow \
   -skip-testing:WaveFlowUITests
 ```
 
-Swift Testing, four suites: `GroupingTests`, `DurationFormatTests` and
-`SearchTests` (ported from Android), plus `TagNormalizationTests` for the tag
-helpers the grouping identifiers are built on. Still missing: a
-`LibraryScanner` test over a temporary folder — that one needs AVFoundation, so
-it needs a Mac.
+Swift Testing, five suites: `GroupingTests`, `DurationFormatTests`,
+`SearchTests` and `PlaylistTests` (ported from Android), plus
+`TagNormalizationTests` for the tag helpers the grouping identifiers are built
+on. Still missing: a `LibraryScanner` test over a temporary folder — that one
+needs AVFoundation, so it needs a Mac.
 
 CI runs the same command on every push and pull request, resolving the Xcode
 version and the simulator at runtime so runner image updates don't break it.
@@ -150,7 +151,7 @@ CryptoKit are absent on Linux; anything touching those is left to CI.
 - [x] Tests for grouping, duration formatting and tag normalisation
 - [x] Search across songs, albums and artists
 - [ ] Scanner test over a temporary folder
-- [ ] Local playlists (SwiftData): create, rename, delete, add / remove tracks
+- [ ] Local playlists: domain model done; SwiftData store and screens to come
 - [ ] Drag-to-reorder inside a playlist
 - [ ] WaveFlow server sync (playlists, liked, ratings)
 - [ ] Streaming from the WaveFlow server (HMAC signed URLs)
