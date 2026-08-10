@@ -11,7 +11,7 @@ struct GroupingTests {
 
     // MARK: - Albums
 
-    @Test func regroupeLesMorceauxParAlbum() {
+    @Test func groupsSongsByAlbum() {
         let songs = [
             song(id: "1", title: "A", albumId: "album:ep", album: "EP"),
             song(id: "2", title: "B", albumId: "album:ep", album: "EP"),
@@ -29,7 +29,7 @@ struct GroupingTests {
     /// créditée à plusieurs artistes reste **un** album, et la carte affiche
     /// l'artiste du regroupement, pas le crédit complet de la première piste
     /// rencontrée.
-    @Test func afficheLArtisteDuRegroupementPasLeCreditComplet() {
+    @Test func showsTheCollectionArtistNotTheFullCredit() {
         let songs = [
             song(
                 id: "1",
@@ -55,7 +55,7 @@ struct GroupingTests {
         #expect(albums[0].artist == "NAYEON")
     }
 
-    @Test func cumuleLesDureesDeLAlbum() {
+    @Test func sumsAlbumDurations() {
         let songs = [
             song(id: "1", title: "A", albumId: "album:x", duration: 180),
             song(id: "2", title: "B", albumId: "album:x", duration: 240.5),
@@ -67,7 +67,7 @@ struct GroupingTests {
     /// Beaucoup de fichiers n'embarquent pas de pochette : l'album prend la
     /// première disponible parmi ses morceaux plutôt que celle de la première
     /// piste, qui peut être nulle.
-    @Test func retientLaPremierePochetteDisponible() {
+    @Test func keepsTheFirstAvailableArtwork() {
         let artwork = URL(fileURLWithPath: "/tmp/cover.artwork")
         let songs = [
             song(id: "1", title: "A", albumId: "album:x", artworkURL: nil),
@@ -77,7 +77,7 @@ struct GroupingTests {
         #expect(songs.toAlbums()[0].artworkURL == artwork)
     }
 
-    @Test func trieLesAlbumsSansTenirCompteDeLaCasse() {
+    @Test func sortsAlbumsCaseInsensitively() {
         let songs = [
             song(id: "1", title: "A", albumId: "album:zebra", album: "zebra"),
             song(id: "2", title: "B", albumId: "album:alpha", album: "Alpha"),
@@ -87,7 +87,7 @@ struct GroupingTests {
         #expect(songs.toAlbums().map(\.title) == ["Alpha", "beta", "zebra"])
     }
 
-    @Test func retombeSurAlbumInconnuSansTag() {
+    @Test func fallsBackToUnknownAlbumWithoutATag() {
         let albums = [song(id: "1", title: "A", albumId: "album:", album: nil)].toAlbums()
 
         #expect(albums[0].title == "Album inconnu")
@@ -97,7 +97,7 @@ struct GroupingTests {
 
     /// `albumCount` compte les albums *distincts*, pas les morceaux : un
     /// artiste avec deux albums de trois titres affiche « 2 albums ».
-    @Test func compteLesAlbumsDistinctsDUnArtiste() {
+    @Test func countsAnArtistsDistinctAlbums() {
         let songs = [
             song(id: "1", title: "A", albumId: "album:un", artistId: "artist:x", collectionArtist: "X"),
             song(id: "2", title: "B", albumId: "album:un", artistId: "artist:x", collectionArtist: "X"),
@@ -111,7 +111,7 @@ struct GroupingTests {
         #expect(artists[0].trackCount == 3)
     }
 
-    @Test func trieLesArtistesSansTenirCompteDeLaCasse() {
+    @Test func sortsArtistsCaseInsensitively() {
         let songs = [
             song(id: "1", title: "A", artistId: "artist:zaz", collectionArtist: "zaz"),
             song(id: "2", title: "B", artistId: "artist:abba", collectionArtist: "ABBA"),
@@ -120,7 +120,7 @@ struct GroupingTests {
         #expect(songs.toArtists().map(\.name) == ["ABBA", "zaz"])
     }
 
-    @Test func retombeSurArtisteInconnuSansTag() {
+    @Test func fallsBackToUnknownArtistWithoutATag() {
         let artists = [song(id: "1", title: "A", artistId: "artist:", collectionArtist: nil)].toArtists()
 
         #expect(artists[0].name == "Artiste inconnu")
@@ -128,7 +128,7 @@ struct GroupingTests {
 
     // MARK: - Bibliothèque
 
-    @Test func bibliothequeVideNeProduitAucunRegroupement() {
+    @Test func anEmptyLibraryProducesNoGrouping() {
         let library = Library(isLoading: false, songs: [])
 
         #expect(library.albums.isEmpty)
@@ -139,12 +139,12 @@ struct GroupingTests {
     /// `isEmpty` ne veut pas dire « aucun morceau » mais « chargement terminé,
     /// sans erreur, et rien trouvé » — c'est ce qui distingue l'écran d'accueil
     /// vide de l'écran de chargement.
-    @Test func nEstPasVidePendantLeChargementNiEnErreur() {
+    @Test func isNotEmptyWhileLoadingNorOnError() {
         #expect(!Library(isLoading: true, songs: []).isEmpty)
         #expect(!Library(isLoading: false, songs: [], errorMessage: "boum").isEmpty)
     }
 
-    @Test func indexeLesMorceauxParIdentifiant() {
+    @Test func indexesSongsByIdentifier() {
         let songs = [
             song(id: "a/1.mp3", title: "A"),
             song(id: "b/2.mp3", title: "B"),
@@ -155,7 +155,7 @@ struct GroupingTests {
         #expect(library.songsByID["inconnu"] == nil)
     }
 
-    @Test func filtreLesMorceauxDUnAlbumEtDUnArtiste() {
+    @Test func filtersSongsOfAnAlbumAndOfAnArtist() {
         let songs = [
             song(id: "1", title: "A", albumId: "album:un", artistId: "artist:x"),
             song(id: "2", title: "B", albumId: "album:deux", artistId: "artist:x"),
