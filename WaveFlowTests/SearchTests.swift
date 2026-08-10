@@ -24,48 +24,48 @@ struct SearchTests {
         )
     }
 
-    @Test func uneRequeteVideNeRenvoieRienPlutotQueTout() {
+    @Test func anEmptyQueryReturnsNothingRatherThanEverything() {
         #expect(library.search("").isEmpty)
     }
 
-    @Test func uneRequeteFaiteDEspacesNeRenvoieRien() {
+    @Test func aWhitespaceOnlyQueryReturnsNothing() {
         #expect(library.search("   ").isEmpty)
     }
 
-    @Test func unMorceauRessortParSonTitre() {
+    @Test func aSongMatchesByTitle() {
         #expect(library.search("aube").songs.map(\.id) == ["2"])
     }
 
-    @Test func unMorceauRessortParSonAlbum() {
+    @Test func aSongMatchesByAlbum() {
         // Le morceau 2 s'appelle « Aube » : seul son album porte « nuit ».
         #expect(library.search("nuit").songs.map(\.id).contains("2"))
     }
 
-    @Test func unMorceauRessortParSonArtiste() {
+    @Test func aSongMatchesByArtist() {
         #expect(library.search("zoé").songs.map(\.id) == ["1"])
     }
 
-    @Test func laRechercheIgnoreLesAccentsEtLaCasse() {
+    @Test func searchIgnoresCaseAndDiacritics() {
         // La requête doit dépasser l'accent : « zoe » seul correspondrait déjà
         // au préfixe de « zoé » sans qu'aucun accent ait été retiré, et le
         // test passerait pour la mauvaise raison.
         #expect(library.search("ZOE BLANC").songs.map(\.id) == ["1"])
     }
 
-    @Test func uneRequeteAccentueeTrouveUnTexteSansAccent() {
+    @Test func anAccentedQueryFindsUnaccentedText() {
         let sansAccent = Library(isLoading: false, songs: [song(id: "1", title: "Ete")])
 
         #expect(sansAccent.search("été").songs.map(\.id) == ["1"])
     }
 
-    @Test func lesPrefixesPassentDevantLesOccurrencesAuMilieuDuTexte() {
+    @Test func prefixesRankAboveMidTextMatches() {
         // 1 « Nuit blanche » et 2 (album « Nuit ») commencent par la requête ;
         // 3 « Blanche nuit » ne la contient qu'au milieu, et passe donc après
         // alors qu'il ouvre la bibliothèque.
         #expect(library.search("nuit").songs.map(\.id) == ["1", "2", "3"])
     }
 
-    @Test func albumsEtArtistesSontFiltresEuxAussi() {
+    @Test func albumsAndArtistsAreFilteredToo() {
         let results = library.search("alba")
 
         #expect(results.artists.map(\.name) == ["Alba"])
@@ -74,14 +74,14 @@ struct SearchTests {
         #expect(results.albums.map(\.title) == ["Mer", "Nuit"])
     }
 
-    @Test func uneRequeteSansCorrespondanceNeRenvoieAucuneSection() {
+    @Test func aQueryWithoutMatchesReturnsNoSection() {
         #expect(library.search("xylophone").isEmpty)
     }
 
     /// Propre au portage iOS : un fichier sans tag n'est pas écarté de la
     /// recherche, il se cherche sous le libellé de repli que les listes
     /// affichent déjà.
-    @Test func unMorceauSansTagSeTrouveSousSonLibelleDeRepli() {
+    @Test func anUntaggedSongIsFoundUnderItsFallbackLabel() {
         let sansTags = Library(
             isLoading: false,
             songs: [song(id: "1", title: "Piste 1", artist: nil, album: nil)],
