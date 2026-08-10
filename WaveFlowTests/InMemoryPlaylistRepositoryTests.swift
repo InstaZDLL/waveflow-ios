@@ -170,6 +170,53 @@ struct InMemoryPlaylistRepositoryTests {
         }
     }
 
+    /// Le cas de la course, rejoué en séquence : une playlist supprimée entre
+    /// la validation et la mutation doit lever, pas rendre la main en silence.
+    @Test func mutatingAPlaylistDeletedInTheMeantimeThrows() async throws {
+        let playlist = makePlaylist(name: "Été")
+        let repository = makeRepository(playlists: [playlist])
+
+        try await repository.delete(playlist.id)
+
+        await #expect(throws: PlaylistError.unknownPlaylist(playlist.id)) {
+            try await repository.add("a", to: playlist.id)
+        }
+    }
+
+    // MARK: - Concurrence
+
+    /// Cinquante ajouts concurrents : aucun ne doit se perdre, et aucun ne doit
+    /// compter double. C'est ce que garantit la mutation sous verrou, là où un
+    /// lire-modifier-écrire non protégé perdrait des écritures.
+    @Test func concurrentAdditionsAreAllRecorded() async throws {
+        let playlist = makePlaylist(name: "Été")
+        let repository = makeRepository(playlists: [playlist])
+
+        await withTaskGroup(of: Void.self) { group in
+            for index in 0..<50 {
+                group.addTask { try? await repository.add("song-\(index)", to: playlist.id) }
+            }
+        }
+
+        let stored = try await firstEmission(from: repository).first
+        #expect(stored?.songIds.count == 50)
+        #expect(Set(stored?.songIds ?? []).count == 50)
+    }
+
+    /// Un abonné voit les états dans l'ordre où ils ont été produits — y
+    /// compris le tout premier, celui de son inscription.
+    @Test func emissionsReachASubscriberInOrder() async throws {
+        let repository = makeRepository()
+        var emissions = repository.playlists().makeAsyncIterator()
+
+        try await repository.create(name: "A")
+        try await repository.create(name: "B")
+
+        #expect(try await emissions.next()?.isEmpty == true)
+        #expect(try await emissions.next()?.map(\.name) == ["A"])
+        #expect(try await emissions.next()?.map(\.name) == ["A", "B"])
+    }
+
     // MARK: - Horodatage
 
     /// L'horloge est injectée : le dépôt est la couche qui la lit, `Playlist`

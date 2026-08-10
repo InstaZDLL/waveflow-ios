@@ -42,19 +42,21 @@ nonisolated final class InMemoryPlaylistRepository: PlaylistRepository, @uncheck
         AsyncThrowingStream { continuation in
             let id = UUID()
 
-            let snapshot: [Playlist] = lock.withLock {
-                continuations[id] = continuation
-                return sortedByName(storage)
-            }
-
             continuation.onTermination = { [weak self] _ in
                 self?.lock.withLock { self?.continuations[id] = nil }
             }
 
-            // L'état courant part tout de suite : un écran qui s'ouvre alors
-            // que rien ne change ensuite doit quand même afficher quelque
-            // chose.
-            continuation.yield(snapshot)
+            // Inscription et premier envoi dans la même section critique que
+            // les publications suivantes : sinon une mutation concurrente peut
+            // se glisser entre les deux, et l'abonné reçoit l'état récent
+            // avant l'instantané périmé qu'on lui destinait.
+            lock.withLock {
+                continuations[id] = continuation
+                // L'état courant part tout de suite : un écran qui s'ouvre
+                // alors que rien ne change ensuite doit quand même afficher
+                // quelque chose.
+                continuation.yield(sortedByName(storage))
+            }
         }
     }
 
@@ -68,7 +70,7 @@ nonisolated final class InMemoryPlaylistRepository: PlaylistRepository, @uncheck
         var playlist = Playlist(name: trimmed, createdAt: date)
         if let songId { playlist.add(songId, at: date) }
 
-        publish { $0.append(playlist) }
+        commit { $0.append(playlist) }
         return playlist
     }
 
@@ -78,8 +80,11 @@ nonisolated final class InMemoryPlaylistRepository: PlaylistRepository, @uncheck
     }
 
     func delete(_ id: Playlist.ID) async throws {
-        try withPlaylist(id) { storage in
-            storage.removeAll { $0.id == id }
+        try commit { storage in
+            guard let index = storage.firstIndex(where: { $0.id == id }) else {
+                throw PlaylistError.unknownPlaylist(id)
+            }
+            storage.remove(at: index)
         }
     }
 
@@ -99,37 +104,41 @@ nonisolated final class InMemoryPlaylistRepository: PlaylistRepository, @uncheck
 
     /// Applique `change` à la playlist désignée, puis publie.
     ///
-    /// La modification passe par le modèle : c'est lui qui décide si quelque
-    /// chose a réellement changé et s'il faut redater — le dépôt ne fait que
-    /// retrouver la bonne playlist et diffuser le résultat.
+    /// La recherche et la modification sont dans la même section critique :
+    /// les séparer laisserait une suppression concurrente passer entre les
+    /// deux, et la mutation rendrait la main avec succès sans avoir rien
+    /// changé.
+    ///
+    /// La modification elle-même passe par le modèle : c'est lui qui décide si
+    /// quelque chose a réellement changé et s'il faut redater — le dépôt ne
+    /// fait que retrouver la bonne playlist et diffuser le résultat.
     private func mutate(_ id: Playlist.ID, _ change: (inout Playlist) -> Void) throws {
-        try withPlaylist(id) { storage in
-            guard let index = storage.firstIndex(where: { $0.id == id }) else { return }
+        try commit { storage in
+            guard let index = storage.firstIndex(where: { $0.id == id }) else {
+                throw PlaylistError.unknownPlaylist(id)
+            }
             change(&storage[index])
         }
     }
 
-    /// Vérifie l'existence de la playlist, applique `change` au stockage sous
-    /// verrou, puis diffuse hors verrou.
-    private func withPlaylist(_ id: Playlist.ID, _ change: (inout [Playlist]) -> Void) throws {
-        let known = lock.withLock { storage.contains { $0.id == id } }
-        guard known else { throw PlaylistError.unknownPlaylist(id) }
-
-        publish(change)
-    }
-
-    /// Modifie le stockage sous verrou, puis émet le nouvel état.
+    /// Modifie le stockage et publie le résultat, le tout sous verrou.
     ///
-    /// Les continuations sont recopiées avant de rendre le verrou : `yield`
-    /// peut réveiller un consommateur qui rappelle le dépôt, et le faire sous
-    /// verrou l'interbloquerait — `NSLock` n'est pas réentrant.
-    private func publish(_ change: (inout [Playlist]) -> Void) {
-        let (snapshot, listeners) = lock.withLock {
-            change(&storage)
-            return (sortedByName(storage), Array(continuations.values))
-        }
+    /// Émettre sous verrou est ce qui garantit l'ordre : deux mutations
+    /// concurrentes ne peuvent pas livrer leurs instantanés à l'envers, et un
+    /// abonné ne peut pas recevoir un état plus récent avant celui de son
+    /// inscription. `yield` n'exécute pas le consommateur — le tampon n'est
+    /// pas borné, l'élément est mis en file et la tâche reprise sur son propre
+    /// exécuteur — donc rien ne peut rentrer ici pendant qu'on tient le
+    /// verrou.
+    ///
+    /// Si `change` lève, rien n'est publié : le stockage n'a pas été touché.
+    private func commit(_ change: (inout [Playlist]) throws -> Void) rethrows {
+        try lock.withLock {
+            try change(&storage)
 
-        for listener in listeners { listener.yield(snapshot) }
+            let snapshot = sortedByName(storage)
+            for listener in continuations.values { listener.yield(snapshot) }
+        }
     }
 
     /// Même tri que les albums et les artistes : insensible à la casse, dans
