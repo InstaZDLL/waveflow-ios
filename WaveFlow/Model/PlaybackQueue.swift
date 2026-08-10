@@ -157,8 +157,13 @@ nonisolated struct PlaybackQueue: Sendable {
 
     /// Recule d'un morceau, ou rembobine le morceau courant si `elapsed` a
     /// dépassé [restartThreshold].
+    ///
+    /// Le morceau courant est cherché avant le seuil : sans rien qui joue, il
+    /// n'y a pas plus à rembobiner qu'à reculer.
     mutating func previous(elapsed: TimeInterval) -> PlaybackStep? {
+        guard currentIndex != nil else { return nil }
         guard elapsed <= Self.restartThreshold else { return .rewind }
+
         return advance(by: -1, userInitiated: true)
     }
 

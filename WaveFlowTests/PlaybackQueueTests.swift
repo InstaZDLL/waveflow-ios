@@ -199,6 +199,9 @@ struct PlaybackQueueTests {
         #expect(queue.isEmpty)
         #expect(queue.next(userInitiated: true) == nil)
         #expect(queue.previous(elapsed: 0) == nil)
+        // Au-delà du seuil aussi : sans rien qui joue, il n'y a pas plus à
+        // rembobiner qu'à reculer.
+        #expect(queue.previous(elapsed: PlaybackQueue.restartThreshold + 1) == nil)
     }
 
     // MARK: - Modes
