@@ -18,19 +18,12 @@ struct ArtistsScreen: View {
             ) {
                 List(store.library.artists) { artist in
                     NavigationLink(value: artist) {
-                        HStack(spacing: 12) {
-                            ArtworkView(url: artist.artworkURL, cornerRadius: 24)
-                                .frame(width: 48, height: 48)
-
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(artist.name)
-                                    .font(.body)
-                                    .lineLimit(1)
-                                Text("\(albumCountLabel(artist.albumCount)) · \(trackCountLabel(artist.trackCount))")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
+                        MediaRow(
+                            artworkURL: artist.artworkURL,
+                            title: artist.name,
+                            subtitle: "\(albumCountLabel(artist.albumCount)) · \(trackCountLabel(artist.trackCount))",
+                            artworkCornerRadius: 24,
+                        )
                     }
                 }
                 .listStyle(.plain)

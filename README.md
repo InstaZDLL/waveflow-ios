@@ -42,7 +42,8 @@ WaveFlow/
 │  ├─ Song.swift            Domain model, source-agnostic
 │  ├─ Album.swift / Artist.swift  Derived from the song list
 │  ├─ Library.swift         Loaded library; derived views computed once
-│  └─ Grouping.swift        [Song] → albums / artists
+│  ├─ Grouping.swift        [Song] → albums / artists
+│  └─ Search.swift          In-memory filtering, prefix matches first
 ├─ Data/
 │  ├─ AppPaths.swift                 Documents + artwork cache locations
 │  ├─ MusicRepository.swift          Library abstraction (AsyncThrowingStream)
@@ -57,9 +58,10 @@ WaveFlow/
    ├─ Theme.swift             Emerald palette
    ├─ DurationFormat.swift    m:ss / h:mm:ss
    ├─ Labels.swift            Count labels
-   ├─ Components/             ArtworkView, SongRow, LibraryStateContainer
+   ├─ Components/             ArtworkView, SongRow, MediaRow, LibraryStateContainer
    ├─ Library/LibraryScreen.swift   Song list
    ├─ Browse/                 Albums, Artists, their details, shared header
+   ├─ Search/SearchScreen.swift     Songs, albums and artists in one list
    └─ Player/
       ├─ ArtworkAccent.swift  Dominant colour from cover
       ├─ MiniPlayer.swift     Bottom accessory of the tab bar
@@ -114,10 +116,11 @@ xcodebuild test -project WaveFlow.xcodeproj -scheme WaveFlow \
   -skip-testing:WaveFlowUITests
 ```
 
-Swift Testing, three suites: `GroupingTests` and `DurationFormatTests` (ported
-from Android), plus `TagNormalizationTests` for the tag helpers the grouping
-identifiers are built on. Still missing: a `LibraryScanner` test over a
-temporary folder — that one needs AVFoundation, so it needs a Mac.
+Swift Testing, four suites: `GroupingTests`, `DurationFormatTests` and
+`SearchTests` (ported from Android), plus `TagNormalizationTests` for the tag
+helpers the grouping identifiers are built on. Still missing: a
+`LibraryScanner` test over a temporary folder — that one needs AVFoundation, so
+it needs a Mac.
 
 CI runs the same command on every push and pull request, resolving the Xcode
 version and the simulator at runtime so runner image updates don't break it.
@@ -145,9 +148,9 @@ CryptoKit are absent on Linux; anything touching those is left to CI.
 - [x] Album / artist browsing
 - [x] Background playback + lock-screen controls
 - [x] Tests for grouping, duration formatting and tag normalisation
+- [x] Search across songs, albums and artists
 - [ ] Scanner test over a temporary folder
 - [ ] Local playlists (SwiftData): create, rename, delete, add / remove tracks
-- [ ] Search
 - [ ] Drag-to-reorder inside a playlist
 - [ ] WaveFlow server sync (playlists, liked, ratings)
 - [ ] Streaming from the WaveFlow server (HMAC signed URLs)
