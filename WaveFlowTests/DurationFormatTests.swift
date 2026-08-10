@@ -14,7 +14,7 @@ struct DurationFormatTests {
 
     /// Le format bascule à partir d'une heure pleine, et les minutes passent
     /// alors sur deux chiffres — « 1:1:15 » se lirait mal.
-    @Test func switchesToHoursBeyond3600() {
+    @Test func switchesToHoursAtAndBeyond3600() {
         #expect(formatDuration(3599) == "59:59")
         #expect(formatDuration(3600) == "1:00:00")
         #expect(formatDuration(3675) == "1:01:15")
