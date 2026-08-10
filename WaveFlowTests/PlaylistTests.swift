@@ -16,8 +16,8 @@ struct PlaylistTests {
 
     // MARK: - Ajout et retrait
 
-    @Test func lAjoutConserveLOrdreEtDateLaModification() {
-        var playlist = nouvellePlaylist()
+    @Test func addKeepsInsertionOrderAndStampsUpdate() {
+        var playlist = makePlaylist()
         playlist.add("a", at: modification)
         playlist.add("b", at: modification)
         playlist.add("c", at: modification)
@@ -26,30 +26,30 @@ struct PlaylistTests {
         #expect(playlist.updatedAt == modification)
     }
 
-    @Test func unMorceauAjouteDeuxFoisNeCreeQuUneEntree() {
-        var playlist = nouvellePlaylist(songIds: ["a"])
+    @Test func addingTheSameSongTwiceCreatesOneEntry() {
+        var playlist = makePlaylist(songIds: ["a"])
         playlist.add("a", at: modification)
 
         #expect(playlist.songIds == ["a"])
     }
 
-    @Test func unAjoutEnDoublonNeModifiePasUpdatedAt() {
-        var playlist = nouvellePlaylist(songIds: ["a"])
+    @Test func duplicateAddLeavesUpdatedAtUntouched() {
+        var playlist = makePlaylist(songIds: ["a"])
         playlist.add("a", at: modification)
 
         #expect(playlist.updatedAt == creation)
     }
 
-    @Test func retirerUnMorceauLeRetireEtDateLaModification() {
-        var playlist = nouvellePlaylist(songIds: ["a", "b"])
+    @Test func removeDropsTheSongAndStampsUpdate() {
+        var playlist = makePlaylist(songIds: ["a", "b"])
         playlist.remove("a", at: modification)
 
         #expect(playlist.songIds == ["b"])
         #expect(playlist.updatedAt == modification)
     }
 
-    @Test func retirerUnMorceauAbsentNeModifiePasUpdatedAt() {
-        var playlist = nouvellePlaylist(songIds: ["a"])
+    @Test func removingAnAbsentSongLeavesUpdatedAtUntouched() {
+        var playlist = makePlaylist(songIds: ["a"])
         playlist.remove("z", at: modification)
 
         #expect(playlist.songIds == ["a"])
@@ -58,38 +58,38 @@ struct PlaylistTests {
 
     // MARK: - Réordonnancement
 
-    @Test func reorderReecritLOrdreDemande() {
-        var playlist = nouvellePlaylist(songIds: ["a", "b", "c"])
+    @Test func reorderAppliesTheRequestedOrder() {
+        var playlist = makePlaylist(songIds: ["a", "b", "c"])
         playlist.reorder(to: ["c", "a", "b"], at: modification)
 
         #expect(playlist.songIds == ["c", "a", "b"])
         #expect(playlist.updatedAt == modification)
     }
 
-    @Test func reorderALOrdreIdentiqueNeTouchePasUpdatedAt() {
-        var playlist = nouvellePlaylist(songIds: ["a", "b"])
+    @Test func reorderToTheSameOrderLeavesUpdatedAtUntouched() {
+        var playlist = makePlaylist(songIds: ["a", "b"])
         playlist.reorder(to: ["a", "b"], at: modification)
 
         #expect(playlist.updatedAt == creation)
     }
 
-    @Test func reorderSurUnePlaylistVideNeTouchePasUpdatedAt() {
-        var playlist = nouvellePlaylist()
+    @Test func reorderOnAnEmptyPlaylistLeavesUpdatedAtUntouched() {
+        var playlist = makePlaylist()
         playlist.reorder(to: [], at: modification)
 
         #expect(playlist.songIds.isEmpty)
         #expect(playlist.updatedAt == creation)
     }
 
-    @Test func reorderIgnoreUnMorceauEtrangerALaPlaylist() {
-        var playlist = nouvellePlaylist(songIds: ["a", "b"])
+    @Test func reorderIgnoresSongsForeignToThePlaylist() {
+        var playlist = makePlaylist(songIds: ["a", "b"])
         playlist.reorder(to: ["b", "inconnu", "a"], at: modification)
 
         #expect(playlist.songIds == ["b", "a"])
     }
 
-    @Test func reorderIgnoreUnIdentifiantDemandeDeuxFois() {
-        var playlist = nouvellePlaylist(songIds: ["a", "b"])
+    @Test func reorderIgnoresARepeatedIdentifier() {
+        var playlist = makePlaylist(songIds: ["a", "b"])
         playlist.reorder(to: ["b", "b", "a"], at: modification)
 
         #expect(playlist.songIds == ["b", "a"])
@@ -99,15 +99,15 @@ struct PlaylistTests {
     /// résolus contre la bibliothèque. Un fichier disparu de `Documents` reste
     /// dans la playlist sans figurer dans le glisser-déposer — il doit
     /// survivre au réordonnancement, pas être emporté par lui.
-    @Test func reorderOmettantUnMorceauStockeNeLePerdPas() {
-        var playlist = nouvellePlaylist(songIds: ["a", "disparu", "b"])
+    @Test func reorderKeepsStoredSongsTheCallerOmitted() {
+        var playlist = makePlaylist(songIds: ["a", "disparu", "b"])
         playlist.reorder(to: ["b", "a"], at: modification)
 
         #expect(playlist.songIds == ["b", "a", "disparu"])
     }
 
-    @Test func reorderNeGardeQuUneOccurrenceDeChaqueMorceau() {
-        var playlist = nouvellePlaylist(songIds: ["a", "b", "c"])
+    @Test func reorderKeepsOneOccurrenceOfEachSong() {
+        var playlist = makePlaylist(songIds: ["a", "b", "c"])
         playlist.reorder(to: ["c", "c", "a", "inconnu", "a"], at: modification)
 
         #expect(playlist.songIds.sorted() == ["a", "b", "c"])
@@ -116,31 +116,31 @@ struct PlaylistTests {
 
     // MARK: - Nom
 
-    @Test func renommerDateLaModification() {
-        var playlist = nouvellePlaylist(name: "Été")
+    @Test func renameStampsUpdate() {
+        var playlist = makePlaylist(name: "Été")
         playlist.rename(to: "Hiver", at: modification)
 
         #expect(playlist.name == "Hiver")
         #expect(playlist.updatedAt == modification)
     }
 
-    @Test func renommerAlIdentiqueNeTouchePasUpdatedAt() {
-        var playlist = nouvellePlaylist(name: "Été")
+    @Test func renamingToTheSameNameLeavesUpdatedAtUntouched() {
+        var playlist = makePlaylist(name: "Été")
         playlist.rename(to: "Été", at: modification)
 
         #expect(playlist.updatedAt == creation)
     }
 
-    @Test func unNomBlancEstRefuse() {
-        var playlist = nouvellePlaylist(name: "Été")
+    @Test func aBlankNameIsRejected() {
+        var playlist = makePlaylist(name: "Été")
         playlist.rename(to: "   ", at: modification)
 
         #expect(playlist.name == "Été")
         #expect(playlist.updatedAt == creation)
     }
 
-    @Test func leNomEstDebarrasseDeSesEspacesDeBordure() {
-        var playlist = nouvellePlaylist(name: "Été")
+    @Test func theNameIsTrimmed() {
+        var playlist = makePlaylist(name: "Été")
         playlist.rename(to: "  Hiver  ", at: modification)
 
         #expect(playlist.name == "Hiver")
@@ -148,32 +148,32 @@ struct PlaylistTests {
 
     // MARK: - Résolution contre la bibliothèque
 
-    @Test func resoutLesMorceauxDansLOrdreDeLaPlaylist() {
+    @Test func resolvesSongsInPlaylistOrder() {
         let library = Library(isLoading: false, songs: [song("a"), song("b"), song("c")])
-        let playlist = nouvellePlaylist(songIds: ["c", "a"])
+        let playlist = makePlaylist(songIds: ["c", "a"])
 
         #expect(playlist.songs(in: library).map(\.id) == ["c", "a"])
     }
 
     /// Un identifiant sans morceau correspondant est sauté à l'affichage, mais
     /// la playlist le garde : le fichier peut être réimporté.
-    @Test func ignoreUnMorceauAbsentDeLaBibliothequeSansLOublier() {
+    @Test func skipsASongMissingFromTheLibraryWithoutForgettingIt() {
         let library = Library(isLoading: false, songs: [song("a")])
-        let playlist = nouvellePlaylist(songIds: ["a", "disparu"])
+        let playlist = makePlaylist(songIds: ["a", "disparu"])
 
         #expect(playlist.songs(in: library).map(\.id) == ["a"])
         #expect(playlist.songIds == ["a", "disparu"])
     }
 
-    @Test func unePlaylistVideNeResoutAucunMorceau() {
+    @Test func anEmptyPlaylistResolvesToNoSongs() {
         let library = Library(isLoading: false, songs: [song("a")])
 
-        #expect(nouvellePlaylist().songs(in: library).isEmpty)
+        #expect(makePlaylist().songs(in: library).isEmpty)
     }
 
     // MARK: - Fixtures
 
-    private func nouvellePlaylist(name: String = "Playlist", songIds: [String] = []) -> Playlist {
+    private func makePlaylist(name: String = "Playlist", songIds: [String] = []) -> Playlist {
         Playlist(name: name, songIds: songIds, createdAt: creation)
     }
 
