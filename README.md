@@ -52,7 +52,9 @@ WaveFlow/
 │  ├─ DocumentsMusicRepository.swift Folder scan + DispatchSource watch
 │  ├─ LibraryScanner.swift           AVAsset tag reading, artwork extraction
 │  ├─ LibraryStore.swift             App-scoped library, loaded once
-│  └─ MusicImporter.swift            Document picker → Documents
+│  ├─ MusicImporter.swift            Document picker → Documents
+│  ├─ PlaylistRepository.swift       Playlist abstraction (AsyncThrowingStream)
+│  └─ InMemoryPlaylistRepository.swift  No-persistence implementation
 ├─ Playback/
 │  └─ PlaybackController.swift  AVPlayer, Now Playing, remote commands
 └─ UI/
@@ -118,11 +120,13 @@ xcodebuild test -project WaveFlow.xcodeproj -scheme WaveFlow \
   -skip-testing:WaveFlowUITests
 ```
 
-Swift Testing, six suites: `GroupingTests`, `DurationFormatTests`,
+Swift Testing, seven suites: `GroupingTests`, `DurationFormatTests`,
 `SearchTests` and `PlaylistTests` (ported from Android), plus
 `TagNormalizationTests` for the tag helpers the grouping identifiers are built
-on, and `PlaybackQueueTests` for the traversal order — that one has no Android
-counterpart, where the queue belongs to ExoPlayer. Still missing: a
+on, `PlaybackQueueTests` for the traversal order — that one has no Android
+counterpart, where the queue belongs to ExoPlayer — and
+`InMemoryPlaylistRepositoryTests` for the playlist store contract. Still
+missing: a
 `LibraryScanner` test over a temporary folder — that one needs AVFoundation, so
 it needs a Mac.
 

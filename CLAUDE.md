@@ -15,8 +15,8 @@ une part réelle du code.
 | `Foundation`, `Observation`, `Testing`, `XCTest` | disponible |
 | `SwiftUI`, `AVFoundation`, `MediaPlayer`, `UIKit`, `CryptoKit`, `UniformTypeIdentifiers` | absent |
 
-Concrètement : tout `WaveFlow/Model/`, plus `AppPaths`, `MusicRepository`, `DurationFormat` et
-`Labels`, se typecheckent et **s'exécutent** ici. C'est exactement le périmètre des deux premiers
+Concrètement : tout `WaveFlow/Model/`, plus `AppPaths`, `MusicRepository`, `PlaylistRepository`,
+`InMemoryPlaylistRepository`, `DurationFormat` et `Labels`, se typecheckent et **s'exécutent** ici. C'est exactement le périmètre des deux premiers
 tests prioritaires du README (`Grouping`, `DurationFormat`) — ils peuvent être écrits et vérifiés
 sans Mac.
 
@@ -33,7 +33,9 @@ affirmer qu'un build a été vérifié, et laisser trancher la CI macOS.
 ```bash
 swiftc -typecheck -swift-version 5 -default-isolation MainActor \
   WaveFlow/Model/*.swift WaveFlow/Data/AppPaths.swift \
-  WaveFlow/Data/MusicRepository.swift WaveFlow/UI/DurationFormat.swift WaveFlow/UI/Labels.swift
+  WaveFlow/Data/MusicRepository.swift WaveFlow/Data/PlaylistRepository.swift \
+  WaveFlow/Data/InMemoryPlaylistRepository.swift \
+  WaveFlow/UI/DurationFormat.swift WaveFlow/UI/Labels.swift
 ```
 
 Les deux drapeaux reproduisent les réglages du projet Xcode (`SWIFT_VERSION = 5.0`,
@@ -177,10 +179,11 @@ Cible de déploiement iOS 26.5 ; le code utilise des API iOS 26 (`tabViewBottomA
 
 ## Tests
 
-Swift Testing (`@Test` / `#expect`), dans `WaveFlowTests/`. Six suites, toutes exécutables depuis
+Swift Testing (`@Test` / `#expect`), dans `WaveFlowTests/`. Sept suites, toutes exécutables depuis
 Linux : `GroupingTests`, `DurationFormatTests`, `SearchTests`, `PlaylistTests`,
 `TagNormalizationTests` (les helpers de `Song.swift` sur lesquels reposent les identifiants de
-regroupement) et `PlaybackQueueTests` (ordre de traversée, aléatoire, répétition).
+regroupement), `PlaybackQueueTests` (ordre de traversée, aléatoire, répétition) et
+`InMemoryPlaylistRepositoryTests` (le contrat du dépôt de playlists).
 
 Reste à écrire : un test de `LibraryScanner` sur une arborescence temporaire — il exige un Mac
 (AVFoundation) et des fichiers audio de fixture. Un test ne doit dépendre ni d'un vrai fichier audio
