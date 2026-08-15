@@ -13,6 +13,7 @@ struct RootView: View {
 
     @Environment(LibraryStore.self) private var store
     @Environment(PlaybackController.self) private var player
+    @Environment(PlaylistStore.self) private var playlistStore
 
     @State private var selectedTab = Tabs.songs
 
@@ -60,7 +61,12 @@ struct RootView: View {
         } message: {
             Text(importReport ?? "")
         }
-        .task { store.load() }
+        // Les deux observations démarrent ici, une fois : les écrans lisent les
+        // stores, ils n'ouvrent jamais leur propre flux.
+        .task {
+            store.load()
+            playlistStore.load()
+        }
     }
 
     /// Les onglets, extraits pour être posés à l'identique dans les deux
