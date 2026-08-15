@@ -56,8 +56,12 @@ struct PlaylistPersistenceTests {
 
         // L'ancienne est écartée, pas détruite : elle contient les playlists de
         // l'utilisateur, et peut rester récupérable autrement.
-        let displaced = displacedTo.appending(path: "Playlists.store")
-        #expect(FileManager.default.fileExists(atPath: displaced.path))
+        for name in SwiftDataPlaylistRepository.storeFileNames {
+            #expect(
+                FileManager.default.fileExists(atPath: displacedTo.appending(path: name).path),
+                "\(name) aurait dû être écarté avec la base",
+            )
+        }
         #expect(FileManager.default.fileExists(atPath: directory.appending(path: "Playlists.store").path))
     }
 
@@ -86,7 +90,7 @@ struct PlaylistPersistenceTests {
 
         let opening = PlaylistPersistence.open(in: blocked)
 
-        #expect(opening.outcome == .unavailable)
+        #expect(opening.outcome == .unavailable(displacedTo: nil))
         #expect(opening.outcome.notice != nil)
 
         // Utilisable malgré tout, le temps de la session.
@@ -95,13 +99,51 @@ struct PlaylistPersistenceTests {
         #expect(try #require(await emissions.next()).map(\.name) == ["Été"])
     }
 
+    /// Le cas mixte : l'ancienne base a bien été écartée, mais rien n'a pu être
+    /// recréé derrière.
+    ///
+    /// L'écartement doit rester dit. Le taire laisserait croire que les
+    /// playlists sont simplement en attente d'un prochain démarrage, alors
+    /// qu'elles ont été déplacées.
+    ///
+    /// Ce chemin n'est pas reproductible en manipulant le système de fichiers —
+    /// ce qui laisse écarter laisse aussi recréer — d'où la fabrique injectée.
+    @Test func stillReportsTheDisplacementWhenNothingCanBeRecreated() async throws {
+        defer { removeDirectory() }
+        try writeUnreadableStore()
+
+        let opening = PlaylistPersistence.open(in: directory) { _ in
+            throw CocoaError(.fileWriteUnknown)
+        }
+
+        guard case .unavailable(let displacedTo?) = opening.outcome else {
+            Issue.record("attendu un écartement signalé, obtenu \(opening.outcome)")
+            return
+        }
+        #expect(FileManager.default.fileExists(atPath: displacedTo.appending(path: "Playlists.store").path))
+
+        // Le message dit les deux : réinitialisées, et non enregistrées.
+        let notice = try #require(opening.outcome.notice)
+        #expect(notice != PlaylistPersistence.Outcome.unavailable(displacedTo: nil).notice)
+
+        // Et l'application reste utilisable le temps de la session.
+        try await opening.repository.create(name: "Été")
+        var emissions = opening.repository.playlists().makeAsyncIterator()
+        #expect(try #require(await emissions.next()).map(\.name) == ["Été"])
+    }
+
     // MARK: - Fixtures
 
-    /// Une base que SwiftData ne saura pas ouvrir : le fichier existe mais n'est
-    /// pas une base SQLite.
+    /// Une base que SwiftData ne saura pas ouvrir : les fichiers existent mais
+    /// n'ont rien d'une base SQLite.
+    ///
+    /// Les annexes `-wal` et `-shm` sont posées avec elle : c'est la seule
+    /// façon de vérifier qu'elles partent aussi, et un `-wal` resté sur place
+    /// ferait reprendre un journal périmé à la base recréée.
     private func writeUnreadableStore() throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        try Data("ceci n'est pas une base".utf8)
-            .write(to: directory.appending(path: "Playlists.store"))
+        for name in SwiftDataPlaylistRepository.storeFileNames {
+            try Data("ceci n'est pas une base".utf8).write(to: directory.appending(path: name))
+        }
     }
 }

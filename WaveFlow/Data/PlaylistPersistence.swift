@@ -27,7 +27,12 @@ nonisolated enum PlaylistPersistence {
 
         /// Rien n'a pu être ouvert : les playlists ne seront pas persistées.
         /// Le reste de l'application fonctionne, la musique est intacte.
-        case unavailable
+        ///
+        /// [displacedTo] est renseigné quand l'ancienne base avait déjà été
+        /// écartée avant que la recréation échoue : elle a beau ne pas être
+        /// remplacée, elle a bel et bien été déplacée, et le taire laisserait
+        /// croire que les playlists sont toujours là.
+        case unavailable(displacedTo: URL?)
     }
 
     struct Opening {
@@ -35,25 +40,40 @@ nonisolated enum PlaylistPersistence {
         let outcome: Outcome
     }
 
-    static func open(in directory: URL = .applicationSupportDirectory) -> Opening {
-        if let container = try? SwiftDataPlaylistRepository.makeContainer(in: directory) {
+    /// - Parameter makeContainer: point d'injection réservé aux tests. Le
+    ///   chemin « base écartée puis recréation impossible » n'est pas
+    ///   reproductible en manipulant seulement le système de fichiers, et c'est
+    ///   justement celui où l'information de l'écartement se perdait.
+    static func open(
+        in directory: URL = .applicationSupportDirectory,
+        makeContainer: (URL) throws -> ModelContainer = {
+            try SwiftDataPlaylistRepository.makeContainer(in: $0)
+        },
+    ) -> Opening {
+        if let container = try? makeContainer(directory) {
             return Opening(repository: SwiftDataPlaylistRepository(container: container), outcome: .opened)
         }
 
         // Deuxième essai après avoir écarté ce qui traîne : une base illisible
         // le reste, la rouvrir telle quelle échouerait indéfiniment.
-        if let displacedTo = try? displaceStore(in: directory),
-           let container = try? SwiftDataPlaylistRepository.makeContainer(in: directory) {
+        let displacedTo = try? displaceStore(in: directory)
+
+        if let displacedTo, let container = try? makeContainer(directory) {
             return Opening(
                 repository: SwiftDataPlaylistRepository(container: container),
                 outcome: .reset(displacedTo: displacedTo),
             )
         }
 
-        // Ni l'une ni l'autre : le disque est probablement inaccessible. Les
+        // Rien d'ouvrable : le disque est probablement inaccessible. Les
         // playlists vivront le temps de la session plutôt que d'empêcher
-        // l'application de démarrer.
-        return Opening(repository: InMemoryPlaylistRepository(), outcome: .unavailable)
+        // l'application de démarrer — mais si l'ancienne base a malgré tout été
+        // écartée entre-temps, il faut le dire, sinon l'utilisateur croirait
+        // ses playlists simplement en attente.
+        return Opening(
+            repository: InMemoryPlaylistRepository(),
+            outcome: .unavailable(displacedTo: displacedTo),
+        )
     }
 
     /// Déplace la base et ses fichiers annexes dans un sous-dossier daté.
@@ -105,10 +125,17 @@ nonisolated extension PlaylistPersistence.Outcome {
             Ta musique importée, elle, est intacte.
             """
 
-        case .unavailable:
+        case .unavailable(displacedTo: nil):
             """
             Les playlists ne peuvent pas être enregistrées sur cet appareil : \
             elles disparaîtront à la fermeture. Ta musique importée est intacte.
+            """
+
+        case .unavailable:
+            """
+            Tes playlists n'ont pas pu être relues, et elles ne peuvent pas non \
+            plus être enregistrées sur cet appareil : elles disparaîtront à la \
+            fermeture. Ta musique importée, elle, est intacte.
             """
         }
     }
