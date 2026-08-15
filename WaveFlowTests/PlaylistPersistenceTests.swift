@@ -65,6 +65,31 @@ struct PlaylistPersistenceTests {
         #expect(FileManager.default.fileExists(atPath: directory.appending(path: "Playlists.store").path))
     }
 
+    /// Une base proprement fermée n'a ni `-wal` ni `-shm`.
+    ///
+    /// L'écartement doit aboutir quand même : les fichiers sont tentés un par
+    /// un, et l'absence d'une annexe n'est pas un échec. Traiter le lot comme
+    /// un tout ferait renoncer à recréer une base alors que la place vient
+    /// d'être libérée.
+    @Test func displacesAStoreThatHasNoCompanionFiles() async throws {
+        defer { removeDirectory() }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try Data("ceci n'est pas une base".utf8)
+            .write(to: directory.appending(path: "Playlists.store"))
+
+        let opening = PlaylistPersistence.open(in: directory)
+
+        guard case .reset(let displacedTo) = opening.outcome else {
+            Issue.record("attendu une remise à neuf, obtenu \(opening.outcome)")
+            return
+        }
+        #expect(FileManager.default.fileExists(atPath: displacedTo.appending(path: "Playlists.store").path))
+
+        try await opening.repository.create(name: "Hiver")
+        var emissions = opening.repository.playlists().makeAsyncIterator()
+        #expect(try #require(await emissions.next()).map(\.name) == ["Hiver"])
+    }
+
     /// Le message doit nommer ce qui est perdu *et* ce qui ne l'est pas : la
     /// panne touche les playlists, jamais la musique importée.
     @Test func explainsWhatWasLostAndWhatWasNot() throws {

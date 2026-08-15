@@ -56,7 +56,7 @@ nonisolated enum PlaylistPersistence {
 
         // Deuxième essai après avoir écarté ce qui traîne : une base illisible
         // le reste, la rouvrir telle quelle échouerait indéfiniment.
-        let displacedTo = try? displaceStore(in: directory)
+        let displacedTo = displaceStore(in: directory)
 
         if let displacedTo, let container = try? makeContainer(directory) {
             return Opening(
@@ -83,25 +83,38 @@ nonisolated enum PlaylistPersistence {
     ///
     /// Les annexes `-wal` et `-shm` partent avec elle : les laisser ferait
     /// reprendre un journal périmé à la base neuve.
-    private static func displaceStore(in directory: URL) throws -> URL {
+    ///
+    /// Ne lève pas, et chaque fichier est tenté indépendamment : un
+    /// déplacement partiel doit être rapporté, pas perdu. Échouer en bloc
+    /// aurait deux effets, tous deux faux — l'écartement de la base principale
+    /// passerait sous silence alors qu'elle a bougé, et l'appelant renoncerait
+    /// à recréer une base alors que la place est justement libre.
+    ///
+    /// - Returns: le dossier d'accueil, ou `nil` si rien n'a bougé.
+    private static func displaceStore(in directory: URL) -> URL? {
         let stamp = Int(Date().timeIntervalSince1970)
         let destination = directory.appending(path: "DamagedStore-\(stamp)", directoryHint: .isDirectory)
-        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+        guard (try? FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)) != nil
+        else { return nil }
 
         var moved = false
         for name in SwiftDataPlaylistRepository.storeFileNames {
             let source = directory.appending(path: name)
             guard FileManager.default.fileExists(atPath: source.path) else { continue }
-            try FileManager.default.moveItem(at: source, to: destination.appending(path: name))
-            moved = true
+
+            // Une annexe récalcitrante ne doit pas annuler le déplacement de la
+            // base elle-même : c'est elle qui bloque la recréation.
+            if (try? FileManager.default.moveItem(at: source, to: destination.appending(path: name))) != nil {
+                moved = true
+            }
         }
 
-        // Rien à écarter : l'ouverture a échoué pour une autre raison, et la
+        // Rien n'a bougé : l'ouverture a échoué pour une autre raison, et la
         // relancer à l'identique échouerait pareil. On le dit plutôt que de
         // laisser croire à une remise à neuf.
         guard moved else {
             try? FileManager.default.removeItem(at: destination)
-            throw CocoaError(.fileNoSuchFile)
+            return nil
         }
 
         return destination
