@@ -253,19 +253,3 @@ struct InMemoryPlaylistRepositoryTests {
         return try await iterator.next() ?? []
     }
 }
-
-/// Horloge réglable, pour observer un horodatage qu'on choisit plutôt que
-/// l'heure qu'il est.
-private final class MutableClock: @unchecked Sendable {
-
-    private let lock = NSLock()
-    private var date: Date
-
-    init(_ date: Date) { self.date = date }
-
-    func set(_ date: Date) { lock.withLock { self.date = date } }
-
-    var read: @Sendable () -> Date {
-        { [self] in lock.withLock { date } }
-    }
-}

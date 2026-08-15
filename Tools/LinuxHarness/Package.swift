@@ -35,6 +35,13 @@ let settings: [SwiftSetting] = [
 
 let package = Package(
     name: "WaveFlow",
+    // Sans plancher déclaré, SwiftPM vise macOS 10.13 et refuse tout ce qui est
+    // arrivé depuis — `AsyncThrowingStream` (10.15) en tête. Linux n'a pas de
+    // contrainte d'availability, le harnais passait donc là-bas et échouait
+    // depuis un Mac, où il est pourtant le seul moyen de vérifier qu'on n'a pas
+    // refermé le périmètre sans Mac avant de pousser. Ignoré hors plateformes
+    // Apple : rien ne change sous Linux.
+    platforms: [.macOS(.v14)],
     targets: [
         .target(
             name: "WaveFlow",
@@ -43,6 +50,13 @@ let package = Package(
         .testTarget(
             name: "WaveFlowTests",
             dependencies: ["WaveFlow"],
+            // Le dossier de tests est lié en entier : les suites qui dépendent
+            // d'un framework Apple doivent donc être retirées une par une, sans
+            // quoi elles casseraient la compilation du package sous Linux.
+            // Celle-ci teste le dépôt SwiftData, absent hors plateformes Apple ;
+            // son équivalent vérifiable ici est
+            // `InMemoryPlaylistRepositoryTests`, qui couvre le même contrat.
+            exclude: ["SwiftDataPlaylistRepositoryTests.swift"],
             swiftSettings: settings,
         ),
     ],
