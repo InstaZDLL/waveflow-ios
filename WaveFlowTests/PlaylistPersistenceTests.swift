@@ -65,6 +65,38 @@ struct PlaylistPersistenceTests {
         #expect(FileManager.default.fileExists(atPath: directory.appending(path: "Playlists.store").path))
     }
 
+    /// Deux récupérations rapprochées doivent laisser deux archives distinctes.
+    ///
+    /// Elles tombent forcément dans la même seconde ici, ce qui est exactement
+    /// le cas dangereux : un nom d'archive daté à la seconde près se
+    /// réutiliserait, les déplacements échoueraient sur des fichiers déjà
+    /// présents, et le nettoyage du dossier « vide » emporterait l'archive
+    /// précédente — donc les playlists qu'elle contenait.
+    @Test func keepsEveryArchiveWhenRecoveringTwiceInARow() throws {
+        defer { removeDirectory() }
+
+        try writeUnreadableStore()
+        guard case .reset(let first) = PlaylistPersistence.open(in: directory).outcome else {
+            Issue.record("la première récupération aurait dû aboutir")
+            return
+        }
+
+        // La base neuve est à son tour rendue illisible, dans la foulée.
+        try writeUnreadableStore()
+        guard case .reset(let second) = PlaylistPersistence.open(in: directory).outcome else {
+            Issue.record("la seconde récupération aurait dû aboutir")
+            return
+        }
+
+        #expect(first != second)
+        for archive in [first, second] {
+            #expect(
+                FileManager.default.fileExists(atPath: archive.appending(path: "Playlists.store").path),
+                "l'archive \(archive.lastPathComponent) a été perdue",
+            )
+        }
+    }
+
     /// Une base proprement fermée n'a ni `-wal` ni `-shm`.
     ///
     /// L'écartement doit aboutir quand même : les fichiers sont tentés un par

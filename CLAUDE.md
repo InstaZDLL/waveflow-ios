@@ -75,11 +75,20 @@ xcodebuild test -project WaveFlow.xcodeproj -scheme WaveFlow \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
   -skip-testing:WaveFlowUITests
 
-# Un seul test / une seule suite (Swift Testing)
+# Une seule suite
 xcodebuild test -project WaveFlow.xcodeproj -scheme WaveFlow \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
-  -only-testing:WaveFlowTests/NomDeLaSuite/nomDuTest
+  -only-testing:WaveFlowTests/NomDeLaSuite
+
+# Un seul test — les parenthèses sont obligatoires en Swift Testing
+xcodebuild test -project WaveFlow.xcodeproj -scheme WaveFlow \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+  -only-testing:'WaveFlowTests/NomDeLaSuite/nomDuTest()'
 ```
+
+⚠️ Sans les parenthèses, le sélecteur ne correspond à rien : `xcodebuild` n'exécute **aucun test**
+et rend malgré tout `** TEST SUCCEEDED **`. Toujours vérifier qu'une ligne `Test case '…' passed`
+apparaît avant de conclure qu'un test est vert.
 
 La CI résout la version d'Xcode et l'UDID du simulateur à l'exécution : ne jamais y coder en dur un
 nom de simulateur ni un chemin `/Applications/Xcode*.app`.

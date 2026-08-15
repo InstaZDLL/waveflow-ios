@@ -92,8 +92,19 @@ nonisolated enum PlaylistPersistence {
     ///
     /// - Returns: le dossier d'accueil, ou `nil` si rien n'a bougé.
     private static func displaceStore(in directory: URL) -> URL? {
+        // Horodatage *et* tirage unique. La seconde seule ne suffit pas : deux
+        // récupérations dans la même seconde viseraient le même dossier, et
+        // comme `createDirectory` réussit sur un dossier existant, les
+        // déplacements échoueraient sur des fichiers déjà là — puis le retour
+        // à vide plus bas effacerait l'archive précédente, playlists comprises.
+        // L'horodatage reste devant pour que les archives se lisent dans
+        // l'ordre.
         let stamp = Int(Date().timeIntervalSince1970)
-        let destination = directory.appending(path: "DamagedStore-\(stamp)", directoryHint: .isDirectory)
+        let unique = UUID().uuidString.prefix(8)
+        let destination = directory.appending(
+            path: "DamagedStore-\(stamp)-\(unique)",
+            directoryHint: .isDirectory,
+        )
         guard (try? FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)) != nil
         else { return nil }
 
@@ -111,7 +122,9 @@ nonisolated enum PlaylistPersistence {
 
         // Rien n'a bougé : l'ouverture a échoué pour une autre raison, et la
         // relancer à l'identique échouerait pareil. On le dit plutôt que de
-        // laisser croire à une remise à neuf.
+        // laisser croire à une remise à neuf. Le dossier effacé ici est
+        // forcément celui qu'on vient de créer — c'est le tirage unique du nom
+        // qui le garantit.
         guard moved else {
             try? FileManager.default.removeItem(at: destination)
             return nil
