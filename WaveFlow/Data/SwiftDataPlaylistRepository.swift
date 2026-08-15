@@ -28,16 +28,37 @@ nonisolated final class SwiftDataPlaylistRepository: PlaylistRepository {
         self.now = now
     }
 
-    /// Conteneur pour le schéma des playlists.
+    /// Conteneur sur disque.
     ///
-    /// - Parameter inMemory: sans fichier — ce que veulent les tests, chacun
-    ///   partant alors d'une base vierge sans avoir à nettoyer derrière lui.
-    static func makeContainer(inMemory: Bool = false) throws -> ModelContainer {
-        try ModelContainer(
+    /// - Parameter directory: dossier du fichier de stockage, créé s'il manque.
+    ///
+    /// Le dossier est créé explicitement : `Application Support` n'existe pas
+    /// dans le conteneur d'une application fraîchement installée, contrairement
+    /// à `Documents` et `Library/Caches`. SwiftData y dépose son fichier par
+    /// défaut mais ne crée pas le chemin — sans cette ligne, la toute première
+    /// ouverture échoue, et l'application ne démarre pas.
+    static func makeContainer(in directory: URL = .applicationSupportDirectory) throws -> ModelContainer {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+
+        return try ModelContainer(
             for: PlaylistEntity.self,
-            configurations: ModelConfiguration(isStoredInMemoryOnly: inMemory),
+            configurations: ModelConfiguration(url: directory.appending(path: storeName)),
         )
     }
+
+    /// Conteneur sans fichier — ce que veulent les tests, chacun partant d'une
+    /// base vierge sans avoir à nettoyer derrière lui.
+    static func makeInMemoryContainer() throws -> ModelContainer {
+        try ModelContainer(
+            for: PlaylistEntity.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true),
+        )
+    }
+
+    /// Nommé plutôt que laissé au défaut de SwiftData (`default.store`) : le
+    /// jour où une seconde base arrive, deux fichiers « default » ne se
+    /// distingueraient pas.
+    private static let storeName = "Playlists.store"
 
     // MARK: - Lecture
 

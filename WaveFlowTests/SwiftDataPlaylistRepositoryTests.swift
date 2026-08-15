@@ -22,7 +22,7 @@ struct SwiftDataPlaylistRepositoryTests {
     private let creation = Date(timeIntervalSince1970: 1_000)
 
     init() throws {
-        container = try SwiftDataPlaylistRepository.makeContainer(inMemory: true)
+        container = try SwiftDataPlaylistRepository.makeInMemoryContainer()
     }
 
     // MARK: - Flux
@@ -239,6 +239,45 @@ struct SwiftDataPlaylistRepositoryTests {
         #expect(reopened.map(\.id) == [playlist.id])
         #expect(reopened.first?.songIds == ["a"])
         #expect(reopened.first?.createdAt == creation)
+    }
+
+    // MARK: - Ouverture du stockage
+
+    /// `Application Support` n'existe pas dans le conteneur d'une application
+    /// fraîchement installée : l'ouverture doit créer son dossier, sinon le
+    /// tout premier lancement échoue.
+    @Test func createsItsStoreDirectoryWhenMissing() throws {
+        let directory = URL.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        #expect(FileManager.default.fileExists(atPath: directory.path) == false)
+
+        _ = try SwiftDataPlaylistRepository.makeContainer(in: directory)
+
+        #expect(FileManager.default.fileExists(atPath: directory.path))
+    }
+
+    /// Le vrai aller-retour disque : deux conteneurs distincts sur le même
+    /// dossier. Les autres tests tournent en mémoire et ne diraient rien d'un
+    /// stockage sur fichier cassé.
+    @Test func persistsAcrossContainers() async throws {
+        let directory = URL.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let date = creation
+
+        let written = try await SwiftDataPlaylistRepository(
+            container: SwiftDataPlaylistRepository.makeContainer(in: directory),
+            now: { @Sendable in date },
+        ).create(name: "Été", containing: "a")
+
+        let reopened = try await firstEmission(
+            from: SwiftDataPlaylistRepository(
+                container: SwiftDataPlaylistRepository.makeContainer(in: directory),
+                now: { @Sendable in date },
+            ),
+        )
+
+        #expect(reopened.map(\.id) == [written.id])
+        #expect(reopened.first?.songIds == ["a"])
     }
 
     // MARK: - Concurrence
