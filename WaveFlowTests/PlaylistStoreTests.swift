@@ -192,6 +192,15 @@ struct PlaylistStoreTests {
         store.reorder(id, to: ["a"])
         store.reorder(id, to: ["b"])
 
+        // La barrière doit être atteinte avant d'être levée : l'ouvrir trop tôt
+        // la rendrait transparente, et les deux écritures passeraient sans que
+        // la sérialisation soit sollicitée.
+        for _ in 0..<200 {
+            if await gate.hasWaiter { break }
+            await Task.yield()
+        }
+        #expect(await gate.hasWaiter, "la première écriture n'a jamais été retenue")
+
         await gate.open()
         await store.waitForWrites()
 
@@ -226,11 +235,18 @@ struct PlaylistStoreTests {
     /// plutôt qu'un nombre fixe de tours évite qu'une machine chargée ne fasse
     /// échouer le test — et la borne empêche une attente infinie si elle ne
     /// devient jamais vraie.
-    private func settle(until condition: () -> Bool) async {
+    private func settle(
+        until condition: () -> Bool,
+        sourceLocation: SourceLocation = #_sourceLocation,
+    ) async {
         for _ in 0..<200 {
             if condition() { return }
             await Task.yield()
         }
+
+        // Abandonner en silence ferait juger le test sur un état périmé — et il
+        // pourrait passer pour de mauvaises raisons.
+        Issue.record("condition jamais atteinte", sourceLocation: sourceLocation)
     }
 }
 
@@ -241,9 +257,19 @@ private actor Gate {
     private var continuation: CheckedContinuation<Void, Never>?
     private var isOpen = false
 
+    /// Vrai dès qu'une tâche est effectivement retenue.
+    ///
+    /// Sans quoi un test ne saurait pas si la barrière a joué : ouvrir avant
+    /// que quiconque l'atteigne la rend transparente, et l'ordre observé ne
+    /// prouverait plus rien.
+    private(set) var hasWaiter = false
+
     func wait() async {
         guard !isOpen else { return }
-        await withCheckedContinuation { self.continuation = $0 }
+        await withCheckedContinuation {
+            continuation = $0
+            hasWaiter = true
+        }
     }
 
     func open() {
