@@ -49,7 +49,16 @@ jobs:
     # Le job est sauté plutôt que le workflow filtré par `paths:` : un workflow
     # jamais déclenché ne rapporte aucun statut et bloquerait une protection de
     # branche, là où un job sauté est compté comme réussi.
-    if: needs.changes.outputs.app == 'true'
+    #
+    # `always()` est indispensable : sans lui, un échec de la détection sauterait
+    # ce job sans même évaluer la condition — et un job sauté comptant pour
+    # réussi, du code cassé passerait la protection de branche. En cas d'échec on
+    # construit donc quand même : le doute doit coûter un runner, jamais une
+    # régression. Une annulation, elle, reste une annulation.
+    if: >-
+      always() &&
+      (needs.changes.result == 'failure' ||
+       (needs.changes.result == 'success' && needs.changes.outputs.app == 'true'))
     # iOS builds need a macOS runner — no cross-compilation, and the iOS SDK
     # only ships inside Xcode. These slots bill at 10× the Linux rate, so this
     # workflow stays a single job rather than a matrix.

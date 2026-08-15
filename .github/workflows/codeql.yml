@@ -61,7 +61,15 @@ jobs:
     needs: changes
     # Sautée sur une PR qui ne touche pas au code. `main` reste analysée à
     # chaque fusion, et l'exécution hebdomadaire couvre le reste.
-    if: github.event_name != 'pull_request' || needs.changes.outputs.swift == 'true'
+    #
+    # `always()` est indispensable : sans lui, un échec de la détection sauterait
+    # l'analyse sans évaluer la condition, et une analyse de sécurité qui ne
+    # tourne pas ne se remarque pas. En cas d'échec on analyse donc quand même.
+    if: >-
+      always() && needs.changes.result != 'cancelled' &&
+      (github.event_name != 'pull_request' ||
+       needs.changes.result == 'failure' ||
+       needs.changes.outputs.swift == 'true')
     # L'extracteur Swift ne tourne que sur macOS et a besoin d'une vraie
     # compilation pour résoudre les types et les appels.
     runs-on: macos-latest
@@ -105,7 +113,14 @@ jobs:
   analyze-swift-skip:
     name: Analyze (swift)
     needs: changes
-    if: github.event_name == 'pull_request' && needs.changes.outputs.swift != 'true'
+    # Strictement complémentaire du job ci-dessus : uniquement quand la
+    # détection a abouti et conclu qu'il n'y a pas de code touché. Si elle a
+    # échoué, c'est la vraie analyse qui prend le relais, pas ce SARIF vide —
+    # publier « rien à signaler » alors qu'on n'a rien regardé serait pire que
+    # de ne rien publier.
+    if: >-
+      always() && github.event_name == 'pull_request' &&
+      needs.changes.result == 'success' && needs.changes.outputs.swift != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
