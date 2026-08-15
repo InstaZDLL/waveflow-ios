@@ -56,10 +56,28 @@ struct RootView: View {
             allowsMultipleSelection: true,
             onCompletion: handleImport,
         )
-        .alert("Import", isPresented: .constant(importReport != nil)) {
+        // Les deux liaisons effacent leur message à la fermeture plutôt que
+        // d'être `.constant` : avec une liaison constante, seul le bouton
+        // remettrait l'état à zéro, et toute autre fermeture laisserait
+        // l'alerte se rouvrir aussitôt.
+        .alert("Import", isPresented: Binding(
+            get: { importReport != nil },
+            set: { if !$0 { importReport = nil } },
+        )) {
             Button("OK") { importReport = nil }
         } message: {
             Text(importReport ?? "")
+        }
+        // Le stockage des playlists n'a pas pu être ouvert normalement. Dit une
+        // fois, au démarrage : l'application fonctionne, mais l'utilisateur doit
+        // savoir ce qu'il a perdu — et ce qu'il n'a pas perdu.
+        .alert("Playlists", isPresented: Binding(
+            get: { playlistStore.storageNotice != nil },
+            set: { if !$0 { playlistStore.dismissStorageNotice() } },
+        )) {
+            Button("OK") { playlistStore.dismissStorageNotice() }
+        } message: {
+            Text(playlistStore.storageNotice ?? "")
         }
         // Les deux observations démarrent ici, une fois : les écrans lisent les
         // stores, ils n'ouvrent jamais leur propre flux.
