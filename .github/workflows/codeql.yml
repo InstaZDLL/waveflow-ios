@@ -13,6 +13,27 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      swift: ${{ steps.filter.outputs.swift }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - id: filter
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4
+        with:
+          filters: |
+            swift:
+              - '**/*.swift'
+              - 'WaveFlow.xcodeproj/**'
+              - '.github/workflows/codeql.yml'
+
   analyze-actions:
     name: Analyze (actions)
     runs-on: ubuntu-latest
@@ -37,6 +58,10 @@ jobs:
 
   analyze-swift:
     name: Analyze (swift)
+    needs: changes
+    # Sautée sur une PR qui ne touche pas au code. `main` reste analysée à
+    # chaque fusion, et l'exécution hebdomadaire couvre le reste.
+    if: github.event_name != 'pull_request' || needs.changes.outputs.swift == 'true'
     # L'extracteur Swift ne tourne que sur macOS et a besoin d'une vraie
     # compilation pour résoudre les types et les appels.
     runs-on: macos-latest
@@ -75,4 +100,36 @@ jobs:
 
       - uses: github/codeql-action/analyze@v4
         with:
+          category: "/language:swift"
+
+  analyze-swift-skip:
+    name: Analyze (swift)
+    needs: changes
+    if: github.event_name == 'pull_request' && needs.changes.outputs.swift != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      security-events: write
+      contents: read
+    steps:
+      # Même nom de job et même catégorie que l'analyse réelle : la PR voit un
+      # résultat, sans quoi le scan de code la signalerait comme non analysée.
+      - name: Create empty SARIF
+        run: |
+          cat > empty.sarif <<'EOF'
+          {
+            "version": "2.1.0",
+            "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+            "runs": [
+              {
+                "tool": { "driver": { "name": "CodeQL", "rules": [] } },
+                "results": []
+              }
+            ]
+          }
+          EOF
+
+      - uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: empty.sarif
           category: "/language:swift"
