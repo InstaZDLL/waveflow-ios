@@ -44,8 +44,13 @@ nonisolated enum PlaylistPersistence {
     ///   chemin « base écartée puis recréation impossible » n'est pas
     ///   reproductible en manipulant seulement le système de fichiers, et c'est
     ///   justement celui où l'information de l'écartement se perdait.
+    /// - Parameter now: lecture de l'horloge, injectable comme dans les dépôts.
+    ///   Elle date le dossier d'archive ; la figer est le seul moyen de placer
+    ///   deux récupérations dans la même seconde à coup sûr, donc de vérifier
+    ///   qu'elles ne s'écrasent pas.
     static func open(
         in directory: URL = .applicationSupportDirectory,
+        now: () -> Date = { Date() },
         makeContainer: (URL) throws -> ModelContainer = {
             try SwiftDataPlaylistRepository.makeContainer(in: $0)
         },
@@ -56,7 +61,7 @@ nonisolated enum PlaylistPersistence {
 
         // Deuxième essai après avoir écarté ce qui traîne : une base illisible
         // le reste, la rouvrir telle quelle échouerait indéfiniment.
-        let displacedTo = displaceStore(in: directory)
+        let displacedTo = displaceStore(in: directory, now: now)
 
         if let displacedTo, let container = try? makeContainer(directory) {
             return Opening(
@@ -91,7 +96,7 @@ nonisolated enum PlaylistPersistence {
     /// à recréer une base alors que la place est justement libre.
     ///
     /// - Returns: le dossier d'accueil, ou `nil` si rien n'a bougé.
-    private static func displaceStore(in directory: URL) -> URL? {
+    private static func displaceStore(in directory: URL, now: () -> Date) -> URL? {
         // Horodatage *et* tirage unique. La seconde seule ne suffit pas : deux
         // récupérations dans la même seconde viseraient le même dossier, et
         // comme `createDirectory` réussit sur un dossier existant, les
@@ -99,7 +104,7 @@ nonisolated enum PlaylistPersistence {
         // à vide plus bas effacerait l'archive précédente, playlists comprises.
         // L'horodatage reste devant pour que les archives se lisent dans
         // l'ordre.
-        let stamp = Int(Date().timeIntervalSince1970)
+        let stamp = Int(now().timeIntervalSince1970)
         let unique = UUID().uuidString.prefix(8)
         let destination = directory.appending(
             path: "DamagedStore-\(stamp)-\(unique)",
