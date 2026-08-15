@@ -61,6 +61,14 @@ struct RootView: View {
         } message: {
             Text(importReport ?? "")
         }
+        // Le stockage des playlists n'a pas pu être ouvert normalement. Dit une
+        // fois, au démarrage : l'application fonctionne, mais l'utilisateur doit
+        // savoir ce qu'il a perdu — et ce qu'il n'a pas perdu.
+        .alert("Playlists", isPresented: .constant(playlistStore.storageNotice != nil)) {
+            Button("OK") { playlistStore.dismissStorageNotice() }
+        } message: {
+            Text(playlistStore.storageNotice ?? "")
+        }
         // Les deux observations démarrent ici, une fois : les écrans lisent les
         // stores, ils n'ouvrent jamais leur propre flux.
         .task {

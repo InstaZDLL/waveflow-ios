@@ -16,7 +16,7 @@ struct WaveFlowApp: App {
     /// plus tard, si le graphe le justifie.
     @State private var libraryStore = LibraryStore(repository: DocumentsMusicRepository())
     @State private var player = PlaybackController()
-    @State private var playlistStore = PlaylistStore(repository: makePlaylistRepository())
+    @State private var playlistStore = makePlaylistStore()
 
     var body: some Scene {
         WindowGroup {
@@ -29,18 +29,12 @@ struct WaveFlowApp: App {
 
     /// Le stockage des playlists, ouvert au démarrage.
     ///
-    /// L'échec est fatal, et volontairement : les playlists sont la seule
-    /// donnée dont l'application est propriétaire — se rabattre en silence sur
-    /// un dépôt en mémoire ferait disparaître celles de l'utilisateur à la
-    /// fermeture, sans que rien ne l'en avertisse. Même parti pris que
-    /// `AppPaths.documents`.
-    private static func makePlaylistRepository() -> PlaylistRepository {
-        do {
-            return SwiftDataPlaylistRepository(
-                container: try SwiftDataPlaylistRepository.makeContainer(),
-            )
-        } catch {
-            preconditionFailure("Stockage des playlists inouvrable : \(error)")
-        }
+    /// L'ouverture ne peut pas échouer : [PlaylistPersistence] dégrade par
+    /// paliers plutôt que d'empêcher le démarrage, et rédige ce qu'il faut en
+    /// dire à l'utilisateur. Refuser de démarrer le forcerait à désinstaller —
+    /// donc à perdre `Documents`, et avec lui toute sa musique importée.
+    private static func makePlaylistStore() -> PlaylistStore {
+        let opening = PlaylistPersistence.open()
+        return PlaylistStore(repository: opening.repository, storageNotice: opening.outcome.notice)
     }
 }

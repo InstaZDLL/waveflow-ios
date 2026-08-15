@@ -35,15 +35,27 @@ final class PlaylistStore {
     /// Aucune playlist alors que le chargement s'est bien terminé.
     var isEmpty: Bool { !isLoading && errorMessage == nil && playlists.isEmpty }
 
+    /// À dire une fois si le stockage n'a pas pu être ouvert normalement —
+    /// playlists réinitialisées, ou non persistées de la session.
+    ///
+    /// Reçu tel quel plutôt que déduit d'un type d'issue : le store n'a pas à
+    /// connaître la taxonomie des pannes de stockage, et il resterait sinon
+    /// accroché à un fichier qui importe SwiftData — donc hors du périmètre
+    /// vérifiable sans Mac. C'est [PlaylistPersistence] qui rédige.
+    private(set) var storageNotice: String?
+
     private let repository: PlaylistRepository
     private var observation: Task<Void, Never>?
 
     /// Dernière écriture lancée. Chaque nouvelle l'attend : voir [write].
     private var pendingWrites: Task<Void, Never>?
 
-    init(repository: PlaylistRepository) {
+    init(repository: PlaylistRepository, storageNotice: String? = nil) {
         self.repository = repository
+        self.storageNotice = storageNotice
     }
+
+    func dismissStorageNotice() { storageNotice = nil }
 
     // Pas de `deinit` annulant l'observation, pour la même raison que
     // `LibraryStore` : le store vit aussi longtemps que l'application, et

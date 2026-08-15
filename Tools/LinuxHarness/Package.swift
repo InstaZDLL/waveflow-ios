@@ -56,7 +56,10 @@ let package = Package(
             // Celle-ci teste le dépôt SwiftData, absent hors plateformes Apple ;
             // son équivalent vérifiable ici est
             // `InMemoryPlaylistRepositoryTests`, qui couvre le même contrat.
-            exclude: ["SwiftDataPlaylistRepositoryTests.swift"],
+            exclude: [
+                "SwiftDataPlaylistRepositoryTests.swift",
+                "PlaylistPersistenceTests.swift",
+            ],
             swiftSettings: settings,
         ),
     ],

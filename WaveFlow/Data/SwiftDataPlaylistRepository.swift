@@ -60,6 +60,15 @@ nonisolated final class SwiftDataPlaylistRepository: PlaylistRepository {
     /// distingueraient pas.
     private static let storeName = "Playlists.store"
 
+    /// La base et ses annexes SQLite, dans l'ordre où elles se déplacent.
+    ///
+    /// Exposé pour [PlaylistPersistence], qui doit pouvoir écarter l'ensemble :
+    /// laisser un `-wal` derrière ferait reprendre un journal périmé à la base
+    /// recréée.
+    static var storeFileNames: [String] {
+        [storeName, "\(storeName)-wal", "\(storeName)-shm"]
+    }
+
     // MARK: - Lecture
 
     func playlists() -> AsyncThrowingStream<[Playlist], Error> {
