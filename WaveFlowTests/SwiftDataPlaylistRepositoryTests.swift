@@ -302,8 +302,13 @@ struct SwiftDataPlaylistRepositoryTests {
 
     /// Premier état émis par le flux — l'instantané que reçoit un écran qui
     /// s'abonne.
+    ///
+    /// Un flux qui se termine sans rien émettre échoue le test plutôt que de
+    /// passer pour une liste vide : la garantie vérifiée ici est qu'il émet, et
+    /// un `?? []` la rendrait invérifiable — `emitsAnEmptyListWhenThereIsNothing`
+    /// passerait sur un flux qui n'émet jamais.
     private func firstEmission(from repository: some PlaylistRepository) async throws -> [Playlist] {
         var iterator = repository.playlists().makeAsyncIterator()
-        return try await iterator.next() ?? []
+        return try #require(await iterator.next())
     }
 }

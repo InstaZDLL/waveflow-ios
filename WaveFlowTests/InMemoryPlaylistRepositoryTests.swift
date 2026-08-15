@@ -250,6 +250,6 @@ struct InMemoryPlaylistRepositoryTests {
     /// s'abonne.
     private func firstEmission(from repository: some PlaylistRepository) async throws -> [Playlist] {
         var iterator = repository.playlists().makeAsyncIterator()
-        return try await iterator.next() ?? []
+        return try #require(await iterator.next())
     }
 }

@@ -103,6 +103,17 @@ actor PlaylistStorage {
 
     private var continuations: [UUID: AsyncThrowingStream<[Playlist], Error>.Continuation] = [:]
 
+    /// Flux terminés avant que leur inscription ait pu être traitée.
+    ///
+    /// `playlists()` inscrit depuis une tâche et `onTermination` désinscrit
+    /// depuis une autre : rien n'ordonne les deux. Un consommateur qui
+    /// abandonne aussitôt peut donc faire arriver la désinscription en
+    /// premier — et sans cette trace, l'inscription qui la suit entrerait dans
+    /// `continuations` sans que personne ne vienne jamais l'en retirer. Le flux
+    /// y resterait jusqu'à la fin du processus, recevant des états que plus
+    /// personne ne lit.
+    private var terminatedBeforeSubscribing: Set<UUID> = []
+
     deinit {
         for continuation in continuations.values { continuation.finish() }
     }
@@ -110,19 +121,30 @@ actor PlaylistStorage {
     // MARK: - Abonnements
 
     func subscribe(_ id: UUID, _ continuation: AsyncThrowingStream<[Playlist], Error>.Continuation) {
+        // La terminaison a devancé l'inscription : il n'y a plus personne à
+        // servir. `remove` consomme la marque au passage, l'ensemble ne grossit
+        // donc pas.
+        guard terminatedBeforeSubscribing.remove(id) == nil else { return }
+
+        // Inscrit avant de lire : si l'instantané échoue, `finish` déclenche
+        // `onTermination`, et `unsubscribe` doit retrouver l'entrée pour la
+        // retirer. Inscrire seulement en cas de succès la lui ferait manquer,
+        // et il prendrait cette terminaison pour une course.
+        continuations[id] = continuation
+
         do {
-            // L'instantané est pris avant l'inscription : si la lecture échoue,
-            // l'abonné repart avec l'erreur sans jamais avoir été inscrit.
-            let current = try snapshot()
-            continuations[id] = continuation
-            continuation.yield(current)
+            continuation.yield(try snapshot())
         } catch {
             continuation.finish(throwing: error)
         }
     }
 
     func unsubscribe(_ id: UUID) {
-        continuations[id] = nil
+        guard continuations.removeValue(forKey: id) == nil else { return }
+
+        // Rien à retirer : l'inscription n'est pas encore passée. On laisse la
+        // marque pour qu'elle se sache caduque en arrivant.
+        terminatedBeforeSubscribing.insert(id)
     }
 
     // MARK: - Écriture
@@ -137,7 +159,7 @@ actor PlaylistStorage {
         // peut pas laisser derrière elle une playlist créée mais vide.
         modelContext.insert(PlaylistEntity(playlist))
         try modelContext.save()
-        try publish()
+        publish()
 
         return playlist
     }
@@ -155,7 +177,7 @@ actor PlaylistStorage {
 
         modelContext.delete(entity)
         try modelContext.save()
-        try publish()
+        publish()
     }
 
     func add(_ songId: String, to id: Playlist.ID, at date: Date) throws {
@@ -190,7 +212,7 @@ actor PlaylistStorage {
         entity.apply(playlist)
 
         try modelContext.save()
-        try publish()
+        publish()
     }
 
     private func entity(_ id: Playlist.ID) throws -> PlaylistEntity? {
@@ -209,8 +231,28 @@ actor PlaylistStorage {
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
-    private func publish() throws {
-        let snapshot = try snapshot()
-        for listener in continuations.values { listener.yield(snapshot) }
+    /// Publie l'état courant à tous les abonnés.
+    ///
+    /// Ne lève pas. La mutation qui l'appelle est déjà enregistrée : lui rendre
+    /// une erreur de *lecture* lui ferait croire qu'elle a échoué, et un
+    /// appelant qui rejoue une création déjà persistée en produirait une
+    /// seconde. L'échec d'écriture, lui, reste remonté — `save()` lève avant
+    /// qu'on arrive ici.
+    ///
+    /// Un instantané illisible est en revanche fatal pour les abonnés, qui
+    /// n'ont plus rien de juste à afficher : leur flux se termine sur l'erreur,
+    /// à charge de la couche au-dessus de se réabonner.
+    private func publish() {
+        do {
+            let snapshot = try snapshot()
+            for listener in continuations.values { listener.yield(snapshot) }
+        } catch {
+            // Les entrées ne sont pas retirées ici : `finish` déclenche
+            // `onTermination`, donc `unsubscribe` viendra les retirer par le
+            // chemin normal. Les retirer sur place les lui ferait manquer, et
+            // il les prendrait pour des terminaisons arrivées avant leur
+            // inscription. Un `yield` sur un flux terminé est sans effet.
+            for listener in continuations.values { listener.finish(throwing: error) }
+        }
     }
 }
