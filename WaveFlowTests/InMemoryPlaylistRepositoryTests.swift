@@ -250,22 +250,6 @@ struct InMemoryPlaylistRepositoryTests {
     /// s'abonne.
     private func firstEmission(from repository: some PlaylistRepository) async throws -> [Playlist] {
         var iterator = repository.playlists().makeAsyncIterator()
-        return try await iterator.next() ?? []
-    }
-}
-
-/// Horloge réglable, pour observer un horodatage qu'on choisit plutôt que
-/// l'heure qu'il est.
-private final class MutableClock: @unchecked Sendable {
-
-    private let lock = NSLock()
-    private var date: Date
-
-    init(_ date: Date) { self.date = date }
-
-    func set(_ date: Date) { lock.withLock { self.date = date } }
-
-    var read: @Sendable () -> Date {
-        { [self] in lock.withLock { date } }
+        return try #require(await iterator.next())
     }
 }
