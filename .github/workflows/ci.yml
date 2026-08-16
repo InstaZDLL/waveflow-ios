@@ -50,13 +50,18 @@ jobs:
     # jamais déclenché ne rapporte aucun statut et bloquerait une protection de
     # branche, là où un job sauté est compté comme réussi.
     #
-    # `always()` est indispensable : sans lui, un échec de la détection sauterait
-    # ce job sans même évaluer la condition — et un job sauté comptant pour
-    # réussi, du code cassé passerait la protection de branche. En cas d'échec on
-    # construit donc quand même : le doute doit coûter un runner, jamais une
-    # régression. Une annulation, elle, reste une annulation.
+    # `!cancelled()` est indispensable : sans lui, un échec de la détection
+    # sauterait ce job sans même évaluer la condition — et un job sauté comptant
+    # pour réussi, du code cassé passerait la protection de branche. En cas
+    # d'échec on construit donc quand même : le doute doit coûter un runner,
+    # jamais une régression.
+    #
+    # `!cancelled()` et non `always()` : un run annulé ne doit plus rien
+    # démarrer. Avec `cancel-in-progress`, deux pushes rapprochés annulent le
+    # premier run, et `always()` lui laisserait quand même réserver un runner
+    # macOS — le gaspillage que ce filtre est censé supprimer.
     if: >-
-      always() &&
+      !cancelled() &&
       (needs.changes.result == 'failure' ||
        (needs.changes.result == 'success' && needs.changes.outputs.app == 'true'))
     # iOS builds need a macOS runner — no cross-compilation, and the iOS SDK

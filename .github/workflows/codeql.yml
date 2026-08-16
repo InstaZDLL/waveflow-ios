@@ -62,11 +62,12 @@ jobs:
     # Sautée sur une PR qui ne touche pas au code. `main` reste analysée à
     # chaque fusion, et l'exécution hebdomadaire couvre le reste.
     #
-    # `always()` est indispensable : sans lui, un échec de la détection sauterait
-    # l'analyse sans évaluer la condition, et une analyse de sécurité qui ne
-    # tourne pas ne se remarque pas. En cas d'échec on analyse donc quand même.
+    # `!cancelled()` est indispensable : sans lui, un échec de la détection
+    # sauterait l'analyse sans évaluer la condition, et une analyse de sécurité
+    # qui ne tourne pas ne se remarque pas. En cas d'échec on analyse donc quand
+    # même. Un run annulé, lui, ne démarre plus rien.
     if: >-
-      always() && needs.changes.result != 'cancelled' &&
+      !cancelled() &&
       (github.event_name != 'pull_request' ||
        needs.changes.result == 'failure' ||
        needs.changes.outputs.swift == 'true')
@@ -111,7 +112,7 @@ jobs:
           category: "/language:swift"
 
   analyze-swift-skip:
-    name: Analyze (swift)
+    name: Publish empty Swift SARIF
     needs: changes
     # Strictement complémentaire du job ci-dessus : uniquement quand la
     # détection a abouti et conclu qu'il n'y a pas de code touché. Si elle a
@@ -119,7 +120,7 @@ jobs:
     # publier « rien à signaler » alors qu'on n'a rien regardé serait pire que
     # de ne rien publier.
     if: >-
-      always() && github.event_name == 'pull_request' &&
+      !cancelled() && github.event_name == 'pull_request' &&
       needs.changes.result == 'success' && needs.changes.outputs.swift != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -127,15 +128,11 @@ jobs:
       security-events: write
       contents: read
     steps:
-      # Le nom de ce job doit rester identique à celui de l'analyse réelle, et
-      # ce n'est pas un oubli : c'est par ce nom qu'une protection de branche
-      # exige un check. Le renommer ferait disparaître « Analyze (swift) » des
-      # PR sans code, qui deviendraient impossibles à fusionner — précisément ce
-      # que ce relais est censé éviter. Les deux jobs s'excluant mutuellement,
-      # le nom n'apparaît jamais deux fois.
-      #
-      # Même catégorie aussi : sans résultat publié sous `/language:swift`, le
-      # scan de code signale la PR comme non analysée.
+      # Ce que ce relais protège, c'est la *catégorie*, pas le nom du job :
+      # sans résultat publié sous `/language:swift`, le scan de code signale la
+      # PR comme non analysée. Le nom peut donc être le sien — `analyze-swift`
+      # sauté rapporte déjà son propre check, et un job sauté compte pour
+      # réussi.
       - name: Create empty SARIF
         run: |
           cat > empty.sarif <<'EOF'
