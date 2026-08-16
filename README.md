@@ -130,8 +130,12 @@ missing: a
 `LibraryScanner` test over a temporary folder — that one needs AVFoundation, so
 it needs a Mac.
 
-CI runs the same command on every push and pull request, resolving the Xcode
-version and the simulator at runtime so runner image updates don't break it.
+CI runs the same command, resolving the Xcode version and the simulator at
+runtime so runner image updates don't break it. It only runs when something that
+can affect the build changed — sources, tests, the Xcode project, or the
+workflow itself. A docs-only or config-only pull request skips the macOS job,
+which bills at 10× the Linux rate; the same gate applies to CodeQL's Swift
+analysis, the slowest job of the lot.
 
 ### Without a Mac
 

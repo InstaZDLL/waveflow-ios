@@ -14,8 +14,59 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    # `contents: read` pour le checkout, et `pull-requests: read` parce que sur
+    # une pull request `paths-filter` passe par l'API pour lister les fichiers
+    # modifiés. Le workflow n'accorde que le premier : les deux sont donc
+    # redéclarés ici, un bloc `permissions` de job remplaçant celui du workflow
+    # au lieu de s'y ajouter.
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      app: ${{ steps.filter.outputs.app }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Une PR qui ne touche qu'un `.md`, la config CodeRabbit ou un modèle
+      # d'issue n'a aucune raison de mobiliser un runner macOS. Le filtre porte
+      # sur ce qui entre réellement dans la compilation — plus ce fichier
+      # lui-même, pour qu'une modification de la CI se vérifie encore.
+      - id: filter
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4
+        with:
+          filters: |
+            app:
+              - 'WaveFlow/**'
+              - 'WaveFlowTests/**'
+              - 'WaveFlowUITests/**'
+              - 'WaveFlow.xcodeproj/**'
+              - '.github/workflows/ci.yml'
+
   build-test:
     name: Build & test
+    needs: changes
+    # Le job est sauté plutôt que le workflow filtré par `paths:` : un workflow
+    # jamais déclenché ne rapporte aucun statut et bloquerait une protection de
+    # branche, là où un job sauté est compté comme réussi.
+    #
+    # `!cancelled()` est indispensable : sans lui, un échec de la détection
+    # sauterait ce job sans même évaluer la condition — et un job sauté comptant
+    # pour réussi, du code cassé passerait la protection de branche. En cas
+    # d'échec on construit donc quand même : le doute doit coûter un runner,
+    # jamais une régression.
+    #
+    # `!cancelled()` et non `always()` : un run annulé ne doit plus rien
+    # démarrer. Avec `cancel-in-progress`, deux pushes rapprochés annulent le
+    # premier run, et `always()` lui laisserait quand même réserver un runner
+    # macOS — le gaspillage que ce filtre est censé supprimer.
+    if: >-
+      !cancelled() &&
+      (needs.changes.result == 'failure' ||
+       (needs.changes.result == 'success' && needs.changes.outputs.app == 'true'))
     # iOS builds need a macOS runner — no cross-compilation, and the iOS SDK
     # only ships inside Xcode. These slots bill at 10× the Linux rate, so this
     # workflow stays a single job rather than a matrix.

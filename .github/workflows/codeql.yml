@@ -13,6 +13,27 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      swift: ${{ steps.filter.outputs.swift }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - id: filter
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4
+        with:
+          filters: |
+            swift:
+              - '**/*.swift'
+              - 'WaveFlow.xcodeproj/**'
+              - '.github/workflows/codeql.yml'
+
   analyze-actions:
     name: Analyze (actions)
     runs-on: ubuntu-latest
@@ -25,18 +46,31 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: github/codeql-action/init@v4
+      - uses: github/codeql-action/init@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4
         with:
           languages: actions
           build-mode: none
           queries: security-extended
 
-      - uses: github/codeql-action/analyze@v4
+      - uses: github/codeql-action/analyze@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4
         with:
           category: "/language:actions"
 
   analyze-swift:
     name: Analyze (swift)
+    needs: changes
+    # Sautée sur une PR qui ne touche pas au code. `main` reste analysée à
+    # chaque fusion, et l'exécution hebdomadaire couvre le reste.
+    #
+    # `!cancelled()` est indispensable : sans lui, un échec de la détection
+    # sauterait l'analyse sans évaluer la condition, et une analyse de sécurité
+    # qui ne tourne pas ne se remarque pas. En cas d'échec on analyse donc quand
+    # même. Un run annulé, lui, ne démarre plus rien.
+    if: >-
+      !cancelled() &&
+      (github.event_name != 'pull_request' ||
+       needs.changes.result == 'failure' ||
+       needs.changes.outputs.swift == 'true')
     # L'extracteur Swift ne tourne que sur macOS et a besoin d'une vraie
     # compilation pour résoudre les types et les appels.
     runs-on: macos-latest
@@ -55,7 +89,7 @@ jobs:
           latest=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
           sudo xcode-select -s "$latest"
 
-      - uses: github/codeql-action/init@v4
+      - uses: github/codeql-action/init@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4
         with:
           languages: swift
           # `manual` plutôt qu'`autobuild` : autobuild devine le schéma et la
@@ -73,6 +107,50 @@ jobs:
             -destination 'generic/platform=iOS Simulator' \
             CODE_SIGNING_ALLOWED=NO
 
-      - uses: github/codeql-action/analyze@v4
+      - uses: github/codeql-action/analyze@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4
         with:
+          category: "/language:swift"
+
+  analyze-swift-skip:
+    name: Publish empty Swift SARIF
+    needs: changes
+    # Strictement complémentaire du job ci-dessus : uniquement quand la
+    # détection a abouti et conclu qu'il n'y a pas de code touché. Si elle a
+    # échoué, c'est la vraie analyse qui prend le relais, pas ce SARIF vide —
+    # publier « rien à signaler » alors qu'on n'a rien regardé serait pire que
+    # de ne rien publier.
+    if: >-
+      !cancelled() && github.event_name == 'pull_request' &&
+      needs.changes.result == 'success' && needs.changes.outputs.swift != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # `security-events: write` seul : ce job ne fait aucun checkout et ne lit
+    # rien du dépôt — il écrit un fichier et le publie via l'API de scan de
+    # code. Tout scope non listé est mis à `none`.
+    permissions:
+      security-events: write
+    steps:
+      # Ce que ce relais protège, c'est la *catégorie*, pas le nom du job :
+      # sans résultat publié sous `/language:swift`, le scan de code signale la
+      # PR comme non analysée. Le nom peut donc être le sien — `analyze-swift`
+      # sauté rapporte déjà son propre check, et un job sauté compte pour
+      # réussi.
+      - name: Create empty SARIF
+        run: |
+          cat > empty.sarif <<'EOF'
+          {
+            "version": "2.1.0",
+            "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+            "runs": [
+              {
+                "tool": { "driver": { "name": "CodeQL", "rules": [] } },
+                "results": []
+              }
+            ]
+          }
+          EOF
+
+      - uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4
+        with:
+          sarif_file: empty.sarif
           category: "/language:swift"
