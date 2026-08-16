@@ -25,7 +25,23 @@ struct AddToPlaylistSheet: View {
                     }
                 }
 
-                if !store.playlists.isEmpty {
+                // Les états vides et en erreur sont des lignes de la liste, pas
+                // un `overlay` : superposer une vue pleine hauteur au-dessus de
+                // « Nouvelle playlist » reviendrait à parier sur son
+                // comportement au toucher, alors que c'est la seule action
+                // encore utile quand il n'y a rien à afficher.
+                if let message = store.errorMessage {
+                    Section {
+                        Label(message, systemImage: "exclamationmark.triangle")
+                            .foregroundStyle(.secondary)
+                        Button("Réessayer") { store.retry() }
+                    }
+                } else if store.isEmpty {
+                    Section {
+                        Text("Aucune playlist. Crée-en une pour y ranger « \(song.title) ».")
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
                     Section {
                         ForEach(store.playlists) { playlist in
                             row(for: playlist)
@@ -38,15 +54,6 @@ struct AddToPlaylistSheet: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Annuler") { dismiss() }
-                }
-            }
-            .overlay {
-                if store.isEmpty {
-                    ContentUnavailableView(
-                        "Aucune playlist",
-                        systemImage: "music.note.list",
-                        description: Text("Crée-en une pour y ranger « \(song.title) »."),
-                    )
                 }
             }
         }

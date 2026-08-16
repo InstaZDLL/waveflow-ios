@@ -20,14 +20,14 @@ struct PlaylistDetailScreen: View {
 
     private var playlist: Playlist? { store.playlist(playlistId) }
 
-    private var songs: [Song] {
-        playlist?.songs(in: libraryStore.library) ?? []
-    }
-
     var body: some View {
         Group {
             if let playlist {
-                content(for: playlist)
+                // Résolu une fois par rendu et passé aux vues filles : chaque
+                // accès parcourt toute la playlist contre l'index de la
+                // bibliothèque, et l'en-tête, la liste et le pied en avaient
+                // besoin séparément.
+                content(for: playlist, songs: playlist.songs(in: libraryStore.library))
             } else {
                 // La playlist vient d'être supprimée — depuis cet écran ou un
                 // autre. On le dit plutôt que d'afficher une coquille vide.
@@ -74,7 +74,7 @@ struct PlaylistDetailScreen: View {
         }
     }
 
-    private func content(for playlist: Playlist) -> some View {
+    private func content(for playlist: Playlist, songs: [Song]) -> some View {
         List {
             Section {
                 ForEach(songs) { song in
@@ -91,16 +91,16 @@ struct PlaylistDetailScreen: View {
                     }
                 }
             } header: {
-                header(for: playlist)
+                header(for: playlist, songs: songs)
                     .textCase(nil)
             } footer: {
-                missingFilesNotice(for: playlist)
+                missingFilesNotice(for: playlist, songs: songs)
             }
         }
         .listStyle(.plain)
     }
 
-    private func header(for playlist: Playlist) -> some View {
+    private func header(for playlist: Playlist, songs: [Song]) -> some View {
         DetailHeader(
             artworkURL: songs.first?.artworkURL,
             title: playlist.name,
@@ -116,7 +116,7 @@ struct PlaylistDetailScreen: View {
     /// que trois passerait pour un bug. Rien n'est retiré de la playlist — le
     /// fichier peut être réimporté.
     @ViewBuilder
-    private func missingFilesNotice(for playlist: Playlist) -> some View {
+    private func missingFilesNotice(for playlist: Playlist, songs: [Song]) -> some View {
         let missing = playlist.songIds.count - songs.count
         if missing > 0 {
             Text("\(trackCountLabel(missing)) introuvable\(missing > 1 ? "s" : "") sur l'appareil. Réimporte le fichier pour le retrouver ici.")
