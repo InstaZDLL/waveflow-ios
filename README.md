@@ -149,7 +149,8 @@ cd Tools/LinuxHarness && swift test
 ```
 
 It never builds the app, and Xcode ignores it — `Tools/` sits outside the
-synchronized `WaveFlow/` group. SwiftUI, AVFoundation, MediaPlayer, UIKit and
+synchronized `WaveFlow/` group. It also runs from a Mac, which is the way to
+check before pushing that the Linux-verifiable surface hasn't been narrowed. SwiftUI, AVFoundation, MediaPlayer, UIKit and
 CryptoKit are absent on Linux; anything touching those is left to CI.
 
 ## Roadmap
