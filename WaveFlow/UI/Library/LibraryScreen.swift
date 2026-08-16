@@ -10,6 +10,9 @@ struct LibraryScreen: View {
     @Environment(PlaybackController.self) private var player
     @Environment(\.requestImport) private var requestImport
 
+    /// Morceau dont la feuille « ajouter à une playlist » est ouverte.
+    @State private var songToAdd: Song?
+
     var body: some View {
         NavigationStack {
             LibraryStateContainer(
@@ -25,6 +28,13 @@ struct LibraryScreen: View {
                     }
                     .buttonStyle(.plain)
                     .listRowInsets(.horizontal, 16)
+                    // Appui long, comme sur Android — ici sous forme de menu
+                    // contextuel, le geste iOS équivalent.
+                    .contextMenu {
+                        Button("Ajouter à une playlist…", systemImage: "text.badge.plus") {
+                            songToAdd = song
+                        }
+                    }
                 }
                 .listStyle(.plain)
             }
@@ -42,5 +52,6 @@ struct LibraryScreen: View {
                 }
             }
         }
+        .sheet(item: $songToAdd) { AddToPlaylistSheet(song: $0) }
     }
 }

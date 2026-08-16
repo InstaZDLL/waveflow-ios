@@ -24,12 +24,13 @@ struct RootView: View {
     @State private var albumsPath = NavigationPath()
     @State private var artistsPath = NavigationPath()
     @State private var searchPath = NavigationPath()
+    @State private var playlistsPath = NavigationPath()
 
     @State private var showPlayer = false
     @State private var importing = false
     @State private var importReport: String?
 
-    private enum Tabs { case songs, albums, artists, search }
+    private enum Tabs { case songs, albums, artists, playlists, search }
 
     var body: some View {
         Group {
@@ -79,6 +80,20 @@ struct RootView: View {
         } message: {
             Text(playlistStore.storageNotice ?? "")
         }
+        // Un seul consommateur pour tous les échecs d'écriture — création,
+        // renommage, ajout, retrait, suppression — quel que soit l'écran d'où
+        // ils viennent. Le store les confine déjà pour qu'ils ne fassent pas
+        // tomber l'application ; sans cette alerte ils disparaissaient en
+        // silence, et l'utilisateur voyait simplement son geste rester sans
+        // effet.
+        .alert("Playlists", isPresented: Binding(
+            get: { playlistStore.writeFailure != nil },
+            set: { if !$0 { playlistStore.dismissWriteFailure() } },
+        )) {
+            Button("OK") { playlistStore.dismissWriteFailure() }
+        } message: {
+            Text(playlistStore.writeFailure?.message ?? "")
+        }
         // Les deux observations démarrent ici, une fois : les écrans lisent les
         // stores, ils n'ouvrent jamais leur propre flux.
         .task {
@@ -101,6 +116,9 @@ struct RootView: View {
             }
             Tab("Artistes", systemImage: "music.microphone", value: Tabs.artists) {
                 ArtistsScreen(path: $artistsPath)
+            }
+            Tab("Playlists", systemImage: "music.note.list", value: Tabs.playlists) {
+                PlaylistsScreen(path: $playlistsPath)
             }
             // `role: .search` plutôt qu'un quatrième onglet ordinaire : iOS 26
             // le détache des autres et le laisse se réduire en champ quand la
