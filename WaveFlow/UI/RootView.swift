@@ -24,12 +24,13 @@ struct RootView: View {
     @State private var albumsPath = NavigationPath()
     @State private var artistsPath = NavigationPath()
     @State private var searchPath = NavigationPath()
+    @State private var playlistsPath = NavigationPath()
 
     @State private var showPlayer = false
     @State private var importing = false
     @State private var importReport: String?
 
-    private enum Tabs { case songs, albums, artists, search }
+    private enum Tabs { case songs, albums, artists, playlists, search }
 
     var body: some View {
         Group {
@@ -101,6 +102,9 @@ struct RootView: View {
             }
             Tab("Artistes", systemImage: "music.microphone", value: Tabs.artists) {
                 ArtistsScreen(path: $artistsPath)
+            }
+            Tab("Playlists", systemImage: "music.note.list", value: Tabs.playlists) {
+                PlaylistsScreen(path: $playlistsPath)
             }
             // `role: .search` plutôt qu'un quatrième onglet ordinaire : iOS 26
             // le détache des autres et le laisse se réduire en champ quand la

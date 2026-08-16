@@ -174,9 +174,9 @@ struct PlaylistPersistenceTests {
         defer { removeDirectory() }
         try writeUnreadableStore()
 
-        let opening = PlaylistPersistence.open(in: directory) { _ in
+        let opening = PlaylistPersistence.open(in: directory, makeContainer: { _ in
             throw CocoaError(.fileWriteUnknown)
-        }
+        })
 
         guard case .unavailable(let displacedTo?) = opening.outcome else {
             Issue.record("attendu un écartement signalé, obtenu \(opening.outcome)")
