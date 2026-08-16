@@ -124,9 +124,11 @@ jobs:
       needs.changes.result == 'success' && needs.changes.outputs.swift != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # `security-events: write` seul : ce job ne fait aucun checkout et ne lit
+    # rien du dépôt — il écrit un fichier et le publie via l'API de scan de
+    # code. Tout scope non listé est mis à `none`.
     permissions:
       security-events: write
-      contents: read
     steps:
       # Ce que ce relais protège, c'est la *catégorie*, pas le nom du job :
       # sans résultat publié sous `/language:swift`, le scan de code signale la

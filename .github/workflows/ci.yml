@@ -18,8 +18,11 @@ jobs:
     name: Detect changes
     runs-on: ubuntu-latest
     timeout-minutes: 2
-    # Le workflow n'accorde que `contents: read` ; sur une pull request,
-    # `paths-filter` interroge l'API pour lister les fichiers modifiés.
+    # `contents: read` pour le checkout, et `pull-requests: read` parce que sur
+    # une pull request `paths-filter` passe par l'API pour lister les fichiers
+    # modifiés. Le workflow n'accorde que le premier : les deux sont donc
+    # redéclarés ici, un bloc `permissions` de job remplaçant celui du workflow
+    # au lieu de s'y ajouter.
     permissions:
       contents: read
       pull-requests: read
