@@ -115,6 +115,12 @@ struct LibraryScannerTests {
 
         let songs = await root.scan()
 
+        // Le crédit complet est conservé, mais c'est « Nayeon » qui regroupe.
+        // Compter les identifiants ne suffirait pas : sans repli, les deux
+        // morceaux tomberaient sur un artiste vide — donc sur un identifiant
+        // unique lui aussi, et le test passerait sans rien avoir éprouvé.
+        #expect(songs.map(\.artist) == ["Nayeon", "Nayeon feat. Wonstein"])
+        #expect(songs.allSatisfy { $0.collectionArtist == "Nayeon" })
         #expect(Set(songs.map(\.albumId)).count == 1)
         #expect(Set(songs.map(\.artistId)).count == 1)
     }
