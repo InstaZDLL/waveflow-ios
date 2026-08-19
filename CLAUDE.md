@@ -162,6 +162,27 @@ jamais ce réglage du `.pbxproj`, tout le code en dépend.
   écrans : poser `tabViewBottomAccessory` au premier morceau lancé change l'identité du `TabView` et
   jetterait l'état des vues filles. Même raison pour la sélection d'onglet ancrée dans `@State`.
 
+## Serveur WaveFlow (`WaveFlow/Server/`)
+
+Le serveur est une **source distante séparée**, jamais fusionnée avec la bibliothèque locale :
+RFC-003 l'interdit explicitement, et rapprocher un fichier local d'une piste distante se fait par
+hash BLAKE3 complet exact (RFC-004, encore `Proposed`). Une seconde implémentation de
+`MusicRepository` alimentera donc un second store, pas la même `Library`.
+
+Trois règles du contrat qui ne se devinent pas en lisant le code :
+
+- **Ce qu'on enregistre est l'origine**, jamais `…/api/v2` — sinon les requêtes partent vers
+  `/api/v2/api/v2/…` et rendent des 404 qui ne désignent pas leur cause. `ServerAddress` corrige à
+  la saisie.
+- **Ne jamais brancher sur le statut 409 seul.** Il porte deux codes aux reprises opposées :
+  `conflict` veut un nouvel identifiant d'opération, `cursor_expired` veut jeter la projection
+  locale et repartir d'un instantané complet. `ServerError` les sépare dès la lecture.
+- **Un code d'autorisation est consommé par sa première requête, même ratée.** Relancer le flux
+  d'autorisation, jamais rejouer le code.
+
+Documentation de référence dans le dépôt frère `../waveflow-server` : `docs/api-v2-guide.md`,
+`docs/rfcs/RFC-003-waveflow-sync-v2.md` et `docs/rfcs/RFC-004-local-server-reconciliation.md`.
+
 ## Projet Xcode
 
 `WaveFlow/` est un **file system synchronized group** : tout `.swift` déposé dedans est pris en
@@ -192,14 +213,16 @@ Cible de déploiement iOS 26.5 ; le code utilise des API iOS 26 (`tabViewBottomA
 
 ## Tests
 
-Swift Testing (`@Test` / `#expect`), dans `WaveFlowTests/`. Huit suites tournent sous Linux :
+Swift Testing (`@Test` / `#expect`), dans `WaveFlowTests/`. Dix suites tournent sous Linux :
 `GroupingTests`, `DurationFormatTests`, `SearchTests`, `PlaylistTests`, `TagNormalizationTests`
 (les helpers de `Song.swift` sur lesquels reposent les identifiants de regroupement),
 `PlaybackQueueTests` (ordre de traversée, aléatoire, répétition), `InMemoryPlaylistRepositoryTests`
-(le contrat du dépôt de playlists) et `PlaylistStoreTests`.
+(le contrat du dépôt de playlists), `PlaylistStoreTests`, `ServerAddressTests` et
+`ServerErrorTests`.
 
-Trois exigent un Mac et sont donc listées dans l'`exclude:` de `Tools/LinuxHarness/Package.swift` :
-`SwiftDataPlaylistRepositoryTests`, `PlaylistPersistenceTests` et `LibraryScannerTests`.
+Cinq exigent un Mac et sont donc listées dans l'`exclude:` de `Tools/LinuxHarness/Package.swift` :
+`SwiftDataPlaylistRepositoryTests`, `PlaylistPersistenceTests`, `LibraryScannerTests`,
+`PKCETests` (CryptoKit) et `AuthClientTests` (interception par `URLProtocol`).
 
 `LibraryScannerTests` fabrique ses fichiers audio au lieu d'en déposer dans le dépôt : du silence
 encodé en AAC par `AVAudioFile`, puis remuxé avec ses tags par un export en passthrough. Un `.m4a`
