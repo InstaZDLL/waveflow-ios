@@ -176,6 +176,39 @@ struct PlaylistStoreTests {
         #expect(store.writeFailure?.id != first)
     }
 
+    // MARK: - Reprise d'un ordre refusé
+
+    /// Le glisser-déposer est la seule écriture affichée avant d'être écrite :
+    /// l'écran rend le déposé sans attendre l'aller-retour. Si le stockage
+    /// n'en veut pas, il doit le savoir — sinon la liste garde un ordre que la
+    /// base ignore, et le prochain démarrage le démentira sans prévenir.
+    @Test func handsBackAReorderTheStorageRefused() async throws {
+        let store = PlaylistStore(
+            repository: StubPlaylistRepository(writeError: StubPlaylistRepository.Failure.boom),
+        )
+        var handedBack = false
+
+        store.reorder(UUID(), to: ["a"], onFailure: { handedBack = true })
+        await store.waitForWrites()
+
+        #expect(handedBack)
+        #expect(store.writeFailure?.message == "Impossible de réordonner la playlist.")
+    }
+
+    /// Et ne le reprend pas quand elle aboutit : l'écran a déjà le bon ordre,
+    /// le lui faire relire ferait clignoter la liste à chaque glissé.
+    @Test func leavesAnAcceptedReorderAlone() async throws {
+        let playlist = makePlaylist(name: "Été", songIds: ["a", "b"])
+        let store = makeStore(playlists: [playlist])
+        var handedBack = false
+
+        store.reorder(playlist.id, to: ["b", "a"], onFailure: { handedBack = true })
+        await store.waitForWrites()
+
+        #expect(handedBack == false)
+        #expect(store.writeFailure == nil)
+    }
+
     // MARK: - Ordre des écritures
 
     /// Deux glissers rapprochés partent dans deux tâches : c'est l'ordre des
