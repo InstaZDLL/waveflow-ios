@@ -30,6 +30,13 @@ struct PlaylistDetailScreen: View {
     /// bouge — voir [displayedSongs(of:)].
     @State private var reordered: [Song]?
 
+    /// Rang du dernier réordonnancement demandé.
+    ///
+    /// Sert à reconnaître de quelle demande vient un échec. Comparer les ordres
+    /// n'y suffirait pas : un aller-retour en redemande un déjà demandé, et
+    /// l'échec du premier reprendrait alors l'affichage du troisième.
+    @State private var moveCount = 0
+
     private var playlist: Playlist? { store.playlist(playlistId) }
 
     var body: some View {
@@ -188,14 +195,16 @@ struct PlaylistDetailScreen: View {
         moved.move(fromOffsets: source, toOffset: destination)
         reordered = moved
 
-        let requested = moved.map(\.id)
-        store.reorder(playlistId, to: requested) {
+        moveCount += 1
+        let request = moveCount
+
+        store.reorder(playlistId, to: moved.map(\.id)) {
             // Seulement si l'affichage porte encore cette demande-là. Les
             // écritures sont sérialisées : l'échec de l'une arrive parfois
             // alors qu'un glissé plus récent occupe déjà l'écran, et son ordre
             // à lui reste attendu — il part complet, donc le stockage le
             // retiendra tel quel, échec antérieur ou non.
-            guard reordered?.map(\.id) == requested else { return }
+            guard request == moveCount else { return }
             reordered = nil
         }
     }
