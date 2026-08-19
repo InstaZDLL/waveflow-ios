@@ -178,6 +178,10 @@ Cible de déploiement iOS 26.5 ; le code utilise des API iOS 26 (`tabViewBottomA
   « Importe des fichiers… »), messages de commit. Les identifiants restent en anglais, **noms de
   tests compris** — Kotlin autorise des phrases entre backticks, Swift non, et les noms portés
   d'Android sont donc retraduits plutôt que translittérés.
+- Le projet déclare `developmentRegion = fr` : c'est ce qui fait sortir en français les libellés
+  que le système fournit lui-même — `EditButton` en tête. Sans ça, une interface entièrement
+  écrite en français affiche « Edit » à côté de « Modifier ». Aucun `.lproj` pour autant : les
+  chaînes de l'app sont écrites en dur, il n'y a rien à traduire.
 - Les commentaires expliquent le *pourquoi* — souvent la contrainte iOS ou la divergence avec
   Android. Garder cette densité plutôt que de commenter le *quoi*.
 - **Couleurs** : couleurs sémantiques d'iOS (`.primary`, `.secondary`…) ou palette de `Theme.swift`.

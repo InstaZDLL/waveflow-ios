@@ -18,6 +18,30 @@ struct PlaylistDetailScreen: View {
     @State private var renamedName = ""
     @State private var deleting = false
 
+    /// Ordre affiché tant que le stockage n'a pas rendu le même.
+    ///
+    /// Une liste qu'on réordonne doit suivre le doigt : le déposé est rendu
+    /// avant l'aller-retour d'écriture, sinon la ligne lâchée revient à sa
+    /// place le temps que le flux réémette. Même rôle que le `working`
+    /// d'Android.
+    ///
+    /// Il tombe quand le stockage a répondu la même chose, et quand il a refusé
+    /// d'écrire. Il cesse aussi de s'appliquer si le contenu de la playlist
+    /// bouge — voir [displayedSongs(of:)].
+    ///
+    /// Des identifiants, pas des morceaux : un `Song` retenu ici est une copie
+    /// figée au moment du glissé, et la bibliothèque peut réémettre entre-temps
+    /// — un fichier retagué, une pochette enfin extraite. L'ordre est ce que
+    /// l'écran a décidé ; le contenu des lignes reste au store.
+    @State private var reordered: [String]?
+
+    /// Rang du dernier réordonnancement demandé.
+    ///
+    /// Sert à reconnaître de quelle demande vient un échec. Comparer les ordres
+    /// n'y suffirait pas : un aller-retour en redemande un déjà demandé, et
+    /// l'échec du premier reprendrait alors l'affichage du troisième.
+    @State private var moveCount = 0
+
     private var playlist: Playlist? { store.playlist(playlistId) }
 
     var body: some View {
@@ -27,7 +51,7 @@ struct PlaylistDetailScreen: View {
                 // accès parcourt toute la playlist contre l'index de la
                 // bibliothèque, et l'en-tête, la liste et le pied en avaient
                 // besoin séparément.
-                content(for: playlist, songs: playlist.songs(in: libraryStore.library))
+                content(for: playlist, songs: displayedSongs(of: playlist))
             } else {
                 // La playlist vient d'être supprimée — depuis cet écran ou un
                 // autre. On le dit plutôt que d'afficher une coquille vide.
@@ -36,8 +60,44 @@ struct PlaylistDetailScreen: View {
         }
         .navigationTitle(playlist?.name ?? "Playlist")
         .navigationBarTitleDisplayMode(.inline)
+        // Deux façons pour l'ordre optimiste de cesser d'avoir cours.
+        //
+        // Le stockage a rendu celui qui était demandé : il n'y a plus rien à
+        // devancer. `starts(with:)` plutôt qu'une égalité — la normalisation
+        // range à la suite les morceaux introuvables sur l'appareil, que
+        // l'écran n'a pas listés et n'a donc pas pu demander.
+        //
+        // Ou le contenu a bougé : l'ordre mémorisé décrit alors une playlist
+        // qui n'existe plus, et aucune émission ultérieure ne le validera.
+        // Sans ce second cas il resterait indéfiniment en place — inoffensif
+        // aujourd'hui, [displayedSongs(of:)] refusant de l'appliquer, mais
+        // c'est un état périmé qui n'attend qu'un second réordonnancement
+        // venu d'ailleurs pour se remettre à mentir.
+        //
+        // Une émission qui ne relève ni de l'un ni de l'autre vient d'une
+        // écriture plus ancienne — deux glissés rapprochés partent dans deux
+        // écritures sérialisées — et l'abandonner là ramènerait l'ordre
+        // intermédiaire sous le doigt.
+        .onChange(of: playlist?.songIds) { before, stored in
+            guard let requested = reordered else { return }
+
+            let carriesTheRequest = stored?.starts(with: requested) == true
+            let contentChanged = Set(before ?? []) != Set(stored ?? [])
+
+            if carriesTheRequest || contentChanged { reordered = nil }
+        }
         .toolbar {
             if let playlist {
+                // iOS ne réordonne pas une liste hors du mode édition, là où
+                // Android donne une poignée permanente à chaque ligne. Masqué
+                // sur une playlist vide : il n'y aurait rien à déplacer ni à
+                // retirer. `songIds` plutôt que les morceaux résolus, pour ne
+                // pas refaire la jointure ici.
+                if !playlist.songIds.isEmpty {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        EditButton()
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu("Options de la playlist", systemImage: "ellipsis.circle") {
                         Button("Renommer", systemImage: "pencil") {
@@ -74,6 +134,25 @@ struct PlaylistDetailScreen: View {
         }
     }
 
+    /// Morceaux à afficher, l'ordre optimiste appliqué tant qu'il tient.
+    ///
+    /// Il cesse de tenir dès que le contenu bouge — un retrait par balayage,
+    /// un ajout depuis un autre écran : il décrit alors une playlist qui
+    /// n'existe plus, et l'appliquer afficherait un titre qui n'en fait plus
+    /// partie. Comparer les ensembles suffit, les identifiants d'une playlist
+    /// étant uniques.
+    private func displayedSongs(of playlist: Playlist) -> [Song] {
+        let stored = playlist.songs(in: libraryStore.library)
+
+        guard let reordered,
+              Set(reordered) == Set(stored.map(\.id))
+        else { return stored }
+
+        // Les morceaux sont relus de la bibliothèque, seul l'ordre vient d'ici.
+        // L'égalité des ensembles garantit que rien ne tombe.
+        return reordered.compactMap { libraryStore.library.songsByID[$0] }
+    }
+
     private func content(for playlist: Playlist, songs: [Song]) -> some View {
         List {
             Section {
@@ -90,6 +169,17 @@ struct PlaylistDetailScreen: View {
                         }
                     }
                 }
+                .onMove { source, destination in
+                    move(from: source, to: destination, within: songs)
+                }
+                // Le retrait du mode édition. Le balayage garde son propre
+                // libellé : « Retirer » dit ce que « Supprimer » laisserait
+                // craindre — le fichier, lui, reste sur l'appareil.
+                .onDelete { offsets in
+                    for song in offsets.map({ songs[$0] }) {
+                        store.remove(song.id, from: playlistId)
+                    }
+                }
             } header: {
                 header(for: playlist, songs: songs)
                     .textCase(nil)
@@ -98,6 +188,34 @@ struct PlaylistDetailScreen: View {
             }
         }
         .listStyle(.plain)
+    }
+
+    /// Applique le déplacement à l'affichage, puis l'envoie au stockage.
+    ///
+    /// L'ordre complet part, pas le couple (morceau, destination) : c'est ce
+    /// que l'écran connaît, et `Playlist.reorder(to:at:)` s'occupe du reste —
+    /// notamment de replacer à la suite les morceaux dont le fichier a quitté
+    /// `Documents`, absents d'ici sans l'être de la playlist. Les recalculer
+    /// ici reviendrait à tenir deux fois la même règle.
+    private func move(from source: IndexSet, to destination: Int, within songs: [Song]) {
+        var moved = songs
+        moved.move(fromOffsets: source, toOffset: destination)
+
+        let requested = moved.map(\.id)
+        reordered = requested
+
+        moveCount += 1
+        let request = moveCount
+
+        store.reorder(playlistId, to: requested) {
+            // Seulement si l'affichage porte encore cette demande-là. Les
+            // écritures sont sérialisées : l'échec de l'une arrive parfois
+            // alors qu'un glissé plus récent occupe déjà l'écran, et son ordre
+            // à lui reste attendu — il part complet, donc le stockage le
+            // retiendra tel quel, échec antérieur ou non.
+            guard request == moveCount else { return }
+            reordered = nil
+        }
     }
 
     private func header(for playlist: Playlist, songs: [Song]) -> some View {

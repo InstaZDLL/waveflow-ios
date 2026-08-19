@@ -143,8 +143,18 @@ final class PlaylistStore {
     /// L'ordre complet, tel que l'écran l'affiche : la normalisation — les
     /// identifiants inconnus écartés, les morceaux absents de l'affichage
     /// replacés à la suite — appartient à `Playlist.reorder(to:at:)`.
-    func reorder(_ id: Playlist.ID, to orderedSongIds: [String]) {
-        write("Impossible de réordonner la playlist.") { [repository] in
+    ///
+    /// [onFailure] rend la main à l'écran quand le stockage n'a rien retenu.
+    /// C'est la seule écriture qui en a besoin : elle est aussi la seule que
+    /// l'écran affiche par avance — la liste suit le doigt sans attendre
+    /// l'aller-retour — et il doit donc pouvoir reprendre ce qu'il a montré.
+    /// Les autres n'affichent rien tant que le flux n'a pas réémis.
+    func reorder(
+        _ id: Playlist.ID,
+        to orderedSongIds: [String],
+        onFailure: @escaping () -> Void = {},
+    ) {
+        write("Impossible de réordonner la playlist.", onFailure: onFailure) { [repository] in
             try await repository.reorder(id, to: orderedSongIds)
         }
     }
@@ -165,6 +175,7 @@ final class PlaylistStore {
     /// des gestes.
     private func write(
         _ failureMessage: String,
+        onFailure: @escaping () -> Void = {},
         _ operation: @escaping () async throws -> Void,
     ) {
         let previous = pendingWrites
@@ -174,10 +185,16 @@ final class PlaylistStore {
 
             do {
                 try await operation()
-            } catch is CancellationError {
-                // Écriture abandonnée : rien à signaler à l'utilisateur.
             } catch {
-                writeFailure = WriteFailure(message: failureMessage, underlying: error)
+                // Prévenu dans les deux cas : une écriture seulement abandonnée
+                // n'a pas plus été retenue par le stockage qu'une écriture
+                // ratée, et un appelant qui affiche son geste par avance doit
+                // le reprendre aussi.
+                onFailure()
+
+                if !(error is CancellationError) {
+                    writeFailure = WriteFailure(message: failureMessage, underlying: error)
+                }
             }
         }
     }

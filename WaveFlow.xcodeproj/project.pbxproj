@@ -200,10 +200,10 @@
 				};
 			};
 			buildConfigurationList = 951617013028C21900354BD9 /* Build configuration list for PBXProject "WaveFlow" */;
-			developmentRegion = en;
+			developmentRegion = fr;
 			hasScannedForEncodings = 0;
 			knownRegions = (
-				en,
+				fr,
 				Base,
 			);
 			mainGroup = 951616FD3028C21900354BD9;
