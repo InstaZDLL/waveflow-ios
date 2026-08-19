@@ -192,12 +192,17 @@ Cible de déploiement iOS 26.5 ; le code utilise des API iOS 26 (`tabViewBottomA
 
 ## Tests
 
-Swift Testing (`@Test` / `#expect`), dans `WaveFlowTests/`. Sept suites, toutes exécutables depuis
-Linux : `GroupingTests`, `DurationFormatTests`, `SearchTests`, `PlaylistTests`,
-`TagNormalizationTests` (les helpers de `Song.swift` sur lesquels reposent les identifiants de
-regroupement), `PlaybackQueueTests` (ordre de traversée, aléatoire, répétition) et
-`InMemoryPlaylistRepositoryTests` (le contrat du dépôt de playlists).
+Swift Testing (`@Test` / `#expect`), dans `WaveFlowTests/`. Huit suites tournent sous Linux :
+`GroupingTests`, `DurationFormatTests`, `SearchTests`, `PlaylistTests`, `TagNormalizationTests`
+(les helpers de `Song.swift` sur lesquels reposent les identifiants de regroupement),
+`PlaybackQueueTests` (ordre de traversée, aléatoire, répétition), `InMemoryPlaylistRepositoryTests`
+(le contrat du dépôt de playlists) et `PlaylistStoreTests`.
 
-Reste à écrire : un test de `LibraryScanner` sur une arborescence temporaire — il exige un Mac
-(AVFoundation) et des fichiers audio de fixture. Un test ne doit dépendre ni d'un vrai fichier audio
-du système, ni du dossier `Documents` réel, ni de l'ordre d'exécution.
+Trois exigent un Mac et sont donc listées dans l'`exclude:` de `Tools/LinuxHarness/Package.swift` :
+`SwiftDataPlaylistRepositoryTests`, `PlaylistPersistenceTests` et `LibraryScannerTests`.
+
+`LibraryScannerTests` fabrique ses fichiers audio au lieu d'en déposer dans le dépôt : du silence
+encodé en AAC par `AVAudioFile`, puis remuxé avec ses tags par un export en passthrough. Un `.m4a`
+de fixture serait un binaire opaque, impossible à relire, et le tag qu'on veut éprouver
+n'apparaîtrait nulle part dans le code. Un test ne doit dépendre ni d'un vrai fichier audio du
+système, ni du dossier `Documents` réel, ni de l'ordre d'exécution.
