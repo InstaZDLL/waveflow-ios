@@ -128,11 +128,13 @@ struct LibraryScannerTests {
     /// MARK: - Pochettes
 
     /// Déposée dans le cache et nommée d'après l'album, donc partagée : deux
-    /// titres du même album désignent le même fichier.
+    /// titres du même album désignent le même fichier — et un scan ultérieur
+    /// relit celui qui est là au lieu de l'extraire à nouveau.
     ///
-    /// Ce que le test ne montre pas, c'est que l'extraction n'a lieu qu'une
-    /// fois — le nom se déduisant de l'album, les deux titres pointeraient au
-    /// même endroit même sans le cache. Il faudrait observer les écritures.
+    /// Le partage seul ne prouverait pas la relecture : le nom se déduisant de
+    /// l'album, les deux titres pointeraient au même endroit même sans cache.
+    /// D'où la seconde passe avec une pochette différente dans les fichiers —
+    /// si le fichier gardé change, c'est qu'il a été réécrit.
     @Test func sharesOneArtworkFilePerAlbum() async throws {
         let root = try Fixtures()
         defer { root.remove() }
@@ -158,6 +160,23 @@ struct LibraryScannerTests {
         let artwork = try #require(artworks.first)
         #expect(FileManager.default.fileExists(atPath: artwork.path))
         #expect(artwork.deletingLastPathComponent().standardizedFileURL == root.artwork.standardizedFileURL)
+        #expect(try Data(contentsOf: artwork) == Fixtures.pngPixel)
+
+        // Les mêmes morceaux, une autre pochette embarquée.
+        try await root.writeSong(
+            at: "a.m4a", title: "A",
+            artist: "Nayeon", album: "Im Nayeon", albumArtist: "Nayeon",
+            artwork: Fixtures.otherPngPixel,
+        )
+        try await root.writeSong(
+            at: "b.m4a", title: "B",
+            artist: "Nayeon", album: "Im Nayeon", albumArtist: "Nayeon",
+            artwork: Fixtures.otherPngPixel,
+        )
+
+        let rescanned = await root.scan()
+
+        #expect(rescanned.compactMap(\.artworkURL) == [artwork, artwork])
         #expect(try Data(contentsOf: artwork) == Fixtures.pngPixel)
     }
 
@@ -189,6 +208,12 @@ private struct Fixtures {
     /// acceptera de recopier tel quel.
     static let pngPixel = Data(base64Encoded: """
         iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==
+        """)!
+
+    /// Un second, blanc celui-là : de quoi distinguer une pochette relue d'une
+    /// pochette réécrite.
+    static let otherPngPixel = Data(base64Encoded: """
+        iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4//8/AAX+Av4N70a4AAAAAElFTkSuQmCC
         """)!
 
     init() throws {
@@ -231,6 +256,9 @@ private struct Fixtures {
             at: destination.deletingLastPathComponent(),
             withIntermediateDirectories: true,
         )
+        // L'export refuse d'écraser : un test qui rejoue un chemin doit
+        // pouvoir remplacer le fichier posé au tour précédent.
+        try? FileManager.default.removeItem(at: destination)
 
         let silence = URL.temporaryDirectory.appending(path: "\(UUID().uuidString).m4a")
         defer { try? FileManager.default.removeItem(at: silence) }
