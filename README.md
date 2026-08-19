@@ -3,9 +3,10 @@
 Native iOS client for [WaveFlow](https://github.com/InstaZDLL/WaveFlow) — a
 local-first music player. Swift + SwiftUI + AVFoundation.
 
-> **Status:** early foundation. Plays files you import into the app today; sync
-> with the WaveFlow server (playlists, liked, streaming) comes later, once the
-> server side is finalised.
+> **Status:** usable offline. Plays, browses and organises the files you import
+> into the app — library, albums, artists, search and local playlists. Sync with
+> the WaveFlow server (liked, ratings, streaming) comes later, once the server
+> side is finalised.
 
 ## Where the music comes from
 
@@ -28,8 +29,9 @@ where downloads will land once server sync arrives.
 - **Audio:** `AVPlayer` + `AVAudioSession` + `MPNowPlayingInfoCenter` /
   `MPRemoteCommandCenter` — background playback and lock-screen controls
 - **Library source:** the app's `Documents` folder, tags read via `AVURLAsset`
-- **Local store:** none yet; SwiftData when playlists land
-- **DI:** manual, two `@State` objects owned by `WaveFlowApp`
+- **Local store:** SwiftData, playlists only — the library itself is derived
+  from the folder on every scan, never persisted
+- **DI:** manual, three `@State` objects owned by `WaveFlowApp`
 - **Minimum:** iOS 26
 
 ## Project layout
@@ -54,7 +56,11 @@ WaveFlow/
 │  ├─ LibraryStore.swift             App-scoped library, loaded once
 │  ├─ MusicImporter.swift            Document picker → Documents
 │  ├─ PlaylistRepository.swift       Playlist abstraction (AsyncThrowingStream)
-│  └─ InMemoryPlaylistRepository.swift  No-persistence implementation
+│  ├─ InMemoryPlaylistRepository.swift  No-persistence implementation
+│  ├─ SwiftDataPlaylistRepository.swift Persisted implementation, one model actor
+│  ├─ PlaylistEntity.swift           The SwiftData model, kept out of the domain
+│  ├─ PlaylistPersistence.swift      Opening the store, degrading in three tiers
+│  └─ PlaylistStore.swift            App-scoped playlists, writes serialised
 ├─ Playback/
 │  └─ PlaybackController.swift  AVPlayer, Now Playing, remote commands
 └─ UI/
@@ -66,15 +72,17 @@ WaveFlow/
    ├─ Library/LibraryScreen.swift   Song list
    ├─ Browse/                 Albums, Artists, their details, shared header
    ├─ Search/SearchScreen.swift     Songs, albums and artists in one list
+   ├─ Playlists/              List, detail, rename dialog, add-to sheet and menu
    └─ Player/
       ├─ ArtworkAccent.swift  Dominant colour from cover
       ├─ MiniPlayer.swift     Bottom accessory of the tab bar
       └─ NowPlayingScreen.swift  Full-screen player
 ```
 
-One `LibraryStore` at the app level holds the loaded library, and one
-`PlaybackController` owns the queue; both are injected through the environment.
-Adding a screen means reading those two, never starting a second scan.
+One `LibraryStore` at the app level holds the loaded library, one
+`PlaybackController` owns the queue, and one `PlaylistStore` observes the
+persisted playlists; all three are injected through the environment. Adding a
+screen means reading them, never starting a second scan or a second stream.
 
 The `WaveFlow/` folder is a *file system synchronized group*: any `.swift` file
 dropped in it is picked up by Xcode automatically, with no project file edit.
@@ -95,6 +103,8 @@ the pieces that needed a real translation rather than a line-by-line port:
 | `Palette` | 1×1 downsample of the cover, saturation boosted and brightness clamped |
 | ViewModels + `StateFlow` | `@Observable` classes on the main actor |
 | Bottom bar + floating card | `TabView` + `tabViewBottomAccessory` (iOS 26) |
+| Room `position` column | The array's own order; positions can't collide or go sparse |
+| Permanent drag handle per row | Edit mode — iOS won't reorder a list outside it |
 
 Real-world tags are the main source of bugs here. Most `.m4a` rips carry no
 `albumArtist` (`aART`) tag and put every guest in `artist`, so an EP with two
@@ -120,15 +130,21 @@ xcodebuild test -project WaveFlow.xcodeproj -scheme WaveFlow \
   -skip-testing:WaveFlowUITests
 ```
 
-Swift Testing, seven suites: `GroupingTests`, `DurationFormatTests`,
-`SearchTests` and `PlaylistTests` (ported from Android), plus
-`TagNormalizationTests` for the tag helpers the grouping identifiers are built
-on, `PlaybackQueueTests` for the traversal order — that one has no Android
-counterpart, where the queue belongs to ExoPlayer — and
-`InMemoryPlaylistRepositoryTests` for the playlist store contract. Still
-missing: a
-`LibraryScanner` test over a temporary folder — that one needs AVFoundation, so
-it needs a Mac.
+Swift Testing, eleven suites. Eight run anywhere: `GroupingTests`,
+`DurationFormatTests`, `SearchTests` and `PlaylistTests` (ported from Android),
+plus `TagNormalizationTests` for the tag helpers the grouping identifiers are
+built on, `PlaybackQueueTests` for the traversal order — that one has no Android
+counterpart, where the queue belongs to ExoPlayer — `InMemoryPlaylistRepositoryTests`
+for the playlist store contract, and `PlaylistStoreTests` for the layer above it:
+write ordering, and failures confined to a message instead of a crash.
+
+Three need a Mac: `SwiftDataPlaylistRepositoryTests`, `PlaylistPersistenceTests`
+— the store must open, or degrade, but never keep the app from starting — and
+`LibraryScannerTests`.
+
+That last one builds its own audio: silence encoded to AAC, then remuxed with its
+tags by a passthrough export. A committed `.m4a` fixture would be an opaque blob,
+and the very tags under test wouldn't appear anywhere in the source.
 
 CI runs the same command, resolving the Xcode version and the simulator at
 runtime so runner image updates don't break it. It only runs when something that
@@ -161,9 +177,9 @@ CryptoKit are absent on Linux; anything touching those is left to CI.
 - [x] Background playback + lock-screen controls
 - [x] Tests for grouping, duration formatting and tag normalisation
 - [x] Search across songs, albums and artists
-- [ ] Scanner test over a temporary folder
-- [ ] Local playlists: domain model done; SwiftData store and screens to come
-- [ ] Drag-to-reorder inside a playlist
+- [x] Scanner test over a temporary folder
+- [x] Local playlists: SwiftData store, screens, add from anywhere
+- [x] Drag-to-reorder inside a playlist
 - [ ] WaveFlow server sync (playlists, liked, ratings)
 - [ ] Streaming from the WaveFlow server (HMAC signed URLs)
 - [ ] CarPlay
