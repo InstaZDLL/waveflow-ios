@@ -174,6 +174,14 @@ struct LibraryScannerTests {
             artwork: Fixtures.otherPngPixel,
         )
 
+        // Vérifier d'abord que les fichiers ont bien changé, en les extrayant
+        // dans un cache neuf. Sans ce témoin, une fixture qui cesserait
+        // d'embarquer sa pochette rendrait l'assertion suivante vraie sans que
+        // le cache ait rien eu à faire.
+        let extracted = try #require(await root.scan(artworkDirectory: root.freshArtworkDirectory()).first?.artworkURL)
+        #expect(try Data(contentsOf: extracted) == Fixtures.otherPngPixel)
+
+        // Le cache d'origine, lui, rend toujours la première.
         let rescanned = await root.scan()
 
         #expect(rescanned.compactMap(\.artworkURL) == [artwork, artwork])
@@ -227,8 +235,14 @@ private struct Fixtures {
         try? FileManager.default.removeItem(at: root.deletingLastPathComponent())
     }
 
-    func scan() async -> [Song] {
-        await LibraryScanner.scan(root: root, artworkDirectory: artwork)
+    func scan(artworkDirectory: URL? = nil) async -> [Song] {
+        await LibraryScanner.scan(root: root, artworkDirectory: artworkDirectory ?? artwork)
+    }
+
+    /// Un cache de pochettes neuf, pour observer ce qu'une extraction produit
+    /// sans toucher à celui qu'on veut justement voir intact.
+    func freshArtworkDirectory() -> URL {
+        root.deletingLastPathComponent().appending(path: "Artwork-\(UUID().uuidString)")
     }
 
     func write(_ data: Data, at path: String) throws {
