@@ -17,6 +17,9 @@ struct SearchScreen: View {
 
     @State private var query = ""
 
+    /// Morceau dont la feuille « ajouter à une playlist » est ouverte.
+    @State private var songToAdd: Song?
+
     var body: some View {
         // Filtré une fois par évaluation du corps, puis passé aux sections :
         // une propriété calculée relue à chaque section referait le parcours
@@ -44,6 +47,7 @@ struct SearchScreen: View {
         // le champ perdrait le focus au premier caractère s'il lui était
         // attaché.
         .searchable(text: $query, prompt: "Titres, albums, artistes")
+        .sheet(item: $songToAdd) { AddToPlaylistSheet(song: $0) }
     }
 
     /// Les trois sections partagent une seule liste : un album qui n'apparaît
@@ -73,6 +77,7 @@ struct SearchScreen: View {
                                 SongRow(song: song, isCurrent: player.currentSong?.id == song.id)
                             }
                             .buttonStyle(.plain)
+                            .addToPlaylistMenu(for: song, selection: $songToAdd)
                         }
                     }
                 }

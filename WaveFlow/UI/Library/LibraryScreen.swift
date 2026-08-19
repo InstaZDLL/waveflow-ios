@@ -28,13 +28,7 @@ struct LibraryScreen: View {
                     }
                     .buttonStyle(.plain)
                     .listRowInsets(.horizontal, 16)
-                    // Appui long, comme sur Android — ici sous forme de menu
-                    // contextuel, le geste iOS équivalent.
-                    .contextMenu {
-                        Button("Ajouter à une playlist…", systemImage: "text.badge.plus") {
-                            songToAdd = song
-                        }
-                    }
+                    .addToPlaylistMenu(for: song, selection: $songToAdd)
                 }
                 .listStyle(.plain)
             }
