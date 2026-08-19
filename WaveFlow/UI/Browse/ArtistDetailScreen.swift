@@ -8,6 +8,9 @@ struct ArtistDetailScreen: View {
     @Environment(LibraryStore.self) private var store
     @Environment(PlaybackController.self) private var player
 
+    /// Morceau dont la feuille « ajouter à une playlist » est ouverte.
+    @State private var songToAdd: Song?
+
     private var artist: Artist? { store.library.artist(artistId) }
     private var songs: [Song] { store.library.songsOfArtist(artistId) }
 
@@ -23,6 +26,7 @@ struct ArtistDetailScreen: View {
                                 SongRow(song: song, isCurrent: player.currentSong?.id == song.id)
                             }
                             .buttonStyle(.plain)
+                            .addToPlaylistMenu(for: song, selection: $songToAdd)
                         }
                     } header: {
                         DetailHeader(
@@ -41,5 +45,6 @@ struct ArtistDetailScreen: View {
         }
         .navigationTitle(artist?.name ?? "Artiste")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(item: $songToAdd) { AddToPlaylistSheet(song: $0) }
     }
 }
