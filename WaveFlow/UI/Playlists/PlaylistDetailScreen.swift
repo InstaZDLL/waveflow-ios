@@ -28,7 +28,12 @@ struct PlaylistDetailScreen: View {
     /// Il tombe quand le stockage a répondu la même chose, et quand il a refusé
     /// d'écrire. Il cesse aussi de s'appliquer si le contenu de la playlist
     /// bouge — voir [displayedSongs(of:)].
-    @State private var reordered: [Song]?
+    ///
+    /// Des identifiants, pas des morceaux : un `Song` retenu ici est une copie
+    /// figée au moment du glissé, et la bibliothèque peut réémettre entre-temps
+    /// — un fichier retagué, une pochette enfin extraite. L'ordre est ce que
+    /// l'écran a décidé ; le contenu des lignes reste au store.
+    @State private var reordered: [String]?
 
     /// Rang du dernier réordonnancement demandé.
     ///
@@ -74,7 +79,7 @@ struct PlaylistDetailScreen: View {
         // écritures sérialisées — et l'abandonner là ramènerait l'ordre
         // intermédiaire sous le doigt.
         .onChange(of: playlist?.songIds) { before, stored in
-            guard let requested = reordered?.map(\.id) else { return }
+            guard let requested = reordered else { return }
 
             let carriesTheRequest = stored?.starts(with: requested) == true
             let contentChanged = Set(before ?? []) != Set(stored ?? [])
@@ -140,10 +145,12 @@ struct PlaylistDetailScreen: View {
         let stored = playlist.songs(in: libraryStore.library)
 
         guard let reordered,
-              Set(reordered.map(\.id)) == Set(stored.map(\.id))
+              Set(reordered) == Set(stored.map(\.id))
         else { return stored }
 
-        return reordered
+        // Les morceaux sont relus de la bibliothèque, seul l'ordre vient d'ici.
+        // L'égalité des ensembles garantit que rien ne tombe.
+        return reordered.compactMap { libraryStore.library.songsByID[$0] }
     }
 
     private func content(for playlist: Playlist, songs: [Song]) -> some View {
@@ -193,12 +200,14 @@ struct PlaylistDetailScreen: View {
     private func move(from source: IndexSet, to destination: Int, within songs: [Song]) {
         var moved = songs
         moved.move(fromOffsets: source, toOffset: destination)
-        reordered = moved
+
+        let requested = moved.map(\.id)
+        reordered = requested
 
         moveCount += 1
         let request = moveCount
 
-        store.reorder(playlistId, to: moved.map(\.id)) {
+        store.reorder(playlistId, to: requested) {
             // Seulement si l'affichage porte encore cette demande-là. Les
             // écritures sont sérialisées : l'échec de l'une arrive parfois
             // alors qu'un glissé plus récent occupe déjà l'écran, et son ordre
