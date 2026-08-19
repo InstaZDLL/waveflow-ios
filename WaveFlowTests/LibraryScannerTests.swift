@@ -148,6 +148,10 @@ struct LibraryScannerTests {
 
         let songs = await root.scan()
 
+        // Les deux morceaux d'abord : sans ce compte, une pochette unique ne
+        // prouverait rien — un seul morceau lu en donnerait autant.
+        #expect(songs.count == 2)
+
         let artworks = Set(songs.compactMap(\.artworkURL))
         #expect(artworks.count == 1)
 
@@ -165,6 +169,9 @@ struct LibraryScannerTests {
 
         let songs = await root.scan()
 
+        // Le morceau doit exister : une fixture illisible rendrait une liste
+        // vide, et `first?.artworkURL` serait nul sans que rien n'ait été lu.
+        #expect(songs.count == 1)
         #expect(songs.first?.artworkURL == nil)
     }
 }
