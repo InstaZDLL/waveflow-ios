@@ -59,6 +59,7 @@ let package = Package(
             exclude: [
                 "SwiftDataPlaylistRepositoryTests.swift",
                 "PlaylistPersistenceTests.swift",
+                "LibraryScannerTests.swift",
             ],
             swiftSettings: settings,
         ),
