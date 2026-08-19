@@ -140,7 +140,9 @@ struct PlaylistDetailScreen: View {
     /// un ajout depuis un autre écran : il décrit alors une playlist qui
     /// n'existe plus, et l'appliquer afficherait un titre qui n'en fait plus
     /// partie. Comparer les ensembles suffit, les identifiants d'une playlist
-    /// étant uniques.
+    /// Resolves the songs displayed for a playlist, applying a pending reordered sequence when it matches the playlist’s current songs.
+    /// - Parameter playlist: The playlist whose songs should be displayed.
+    /// - Returns: The playlist’s songs in the pending order when valid; otherwise, their stored order.
     private func displayedSongs(of playlist: Playlist) -> [Song] {
         let stored = playlist.songs(in: libraryStore.library)
 
@@ -153,6 +155,7 @@ struct PlaylistDetailScreen: View {
         return reordered.compactMap { libraryStore.library.songsByID[$0] }
     }
 
+    /// Builds the playlist content with song playback, removal, reordering, and file-availability information.
     private func content(for playlist: Playlist, songs: [Song]) -> some View {
         List {
             Section {
@@ -196,7 +199,11 @@ struct PlaylistDetailScreen: View {
     /// que l'écran connaît, et `Playlist.reorder(to:at:)` s'occupe du reste —
     /// notamment de replacer à la suite les morceaux dont le fichier a quitté
     /// `Documents`, absents d'ici sans l'être de la playlist. Les recalculer
-    /// ici reviendrait à tenir deux fois la même règle.
+    /// Applies a song reorder immediately and saves the resulting order to the playlist.
+    /// - Parameters:
+    ///   - source: The indices of the songs to move.
+    ///   - destination: The destination index for the moved songs.
+    ///   - songs: The songs in their current displayed order.
     private func move(from source: IndexSet, to destination: Int, within songs: [Song]) {
         var moved = songs
         moved.move(fromOffsets: source, toOffset: destination)
@@ -218,6 +225,11 @@ struct PlaylistDetailScreen: View {
         }
     }
 
+    /// Creates the playlist detail header with its artwork, name, track count, duration, and songs.
+    /// - Parameters:
+    ///   - playlist: The playlist represented by the header.
+    ///   - songs: The songs included in the playlist.
+    /// - Returns: A view displaying the playlist details.
     private func header(for playlist: Playlist, songs: [Song]) -> some View {
         DetailHeader(
             artworkURL: songs.first?.artworkURL,

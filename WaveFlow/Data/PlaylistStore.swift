@@ -148,7 +148,11 @@ final class PlaylistStore {
     /// C'est la seule écriture qui en a besoin : elle est aussi la seule que
     /// l'écran affiche par avance — la liste suit le doigt sans attendre
     /// l'aller-retour — et il doit donc pouvoir reprendre ce qu'il a montré.
-    /// Les autres n'affichent rien tant que le flux n'a pas réémis.
+    /// Reorders the songs in a playlist.
+    /// - Parameters:
+    ///   - id: The identifier of the playlist to update.
+    ///   - orderedSongIds: The song identifiers in their desired order.
+    ///   - onFailure: A closure called when the reordering fails or is cancelled.
     func reorder(
         _ id: Playlist.ID,
         to orderedSongIds: [String],
@@ -172,7 +176,11 @@ final class PlaylistStore {
     /// Les écritures sont sérialisées dans leur ordre d'appel : deux glissers
     /// rapprochés partent dans deux tâches, et sans cette chaîne c'est leur
     /// ordre d'arrivée au stockage qui déciderait de l'ordre final, pas l'ordre
-    /// des gestes.
+    /// Queues a write operation after previously pending writes and handles its failure.
+    /// - Parameters:
+    ///   - failureMessage: The user-facing message published for a non-cancellation failure.
+    ///   - onFailure: The callback invoked when the operation fails or is cancelled.
+    ///   - operation: The asynchronous write operation to execute.
     private func write(
         _ failureMessage: String,
         onFailure: @escaping () -> Void = {},
