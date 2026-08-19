@@ -188,7 +188,16 @@ struct PlaylistDetailScreen: View {
         moved.move(fromOffsets: source, toOffset: destination)
         reordered = moved
 
-        store.reorder(playlistId, to: moved.map(\.id), onFailure: { reordered = nil })
+        let requested = moved.map(\.id)
+        store.reorder(playlistId, to: requested) {
+            // Seulement si l'affichage porte encore cette demande-là. Les
+            // écritures sont sérialisées : l'échec de l'une arrive parfois
+            // alors qu'un glissé plus récent occupe déjà l'écran, et son ordre
+            // à lui reste attendu — il part complet, donc le stockage le
+            // retiendra tel quel, échec antérieur ou non.
+            guard reordered?.map(\.id) == requested else { return }
+            reordered = nil
+        }
     }
 
     private func header(for playlist: Playlist, songs: [Song]) -> some View {
