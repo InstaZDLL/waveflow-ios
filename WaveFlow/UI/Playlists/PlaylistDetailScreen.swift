@@ -48,18 +48,31 @@ struct PlaylistDetailScreen: View {
         }
         .navigationTitle(playlist?.name ?? "Playlist")
         .navigationBarTitleDisplayMode(.inline)
-        // Le stockage a rattrapé l'affichage : l'ordre optimiste n'a plus lieu
-        // d'être. Une émission qui ne le porte pas vient d'une écriture plus
-        // ancienne — deux glissés rapprochés partent dans deux écritures
-        // sérialisées — et l'effacer là ramènerait l'ordre intermédiaire sous
-        // le doigt, avant que la seconde écriture ne réémette.
+        // Deux façons pour l'ordre optimiste de cesser d'avoir cours.
         //
-        // `starts(with:)` plutôt qu'une égalité : la normalisation range à la
-        // suite les morceaux introuvables sur l'appareil, que l'écran n'a pas
-        // listés et n'a donc pas pu demander.
-        .onChange(of: playlist?.songIds) { _, stored in
-            guard let reordered, let stored, stored.starts(with: reordered.map(\.id)) else { return }
-            self.reordered = nil
+        // Le stockage a rendu celui qui était demandé : il n'y a plus rien à
+        // devancer. `starts(with:)` plutôt qu'une égalité — la normalisation
+        // range à la suite les morceaux introuvables sur l'appareil, que
+        // l'écran n'a pas listés et n'a donc pas pu demander.
+        //
+        // Ou le contenu a bougé : l'ordre mémorisé décrit alors une playlist
+        // qui n'existe plus, et aucune émission ultérieure ne le validera.
+        // Sans ce second cas il resterait indéfiniment en place — inoffensif
+        // aujourd'hui, [displayedSongs(of:)] refusant de l'appliquer, mais
+        // c'est un état périmé qui n'attend qu'un second réordonnancement
+        // venu d'ailleurs pour se remettre à mentir.
+        //
+        // Une émission qui ne relève ni de l'un ni de l'autre vient d'une
+        // écriture plus ancienne — deux glissés rapprochés partent dans deux
+        // écritures sérialisées — et l'abandonner là ramènerait l'ordre
+        // intermédiaire sous le doigt.
+        .onChange(of: playlist?.songIds) { before, stored in
+            guard let requested = reordered?.map(\.id) else { return }
+
+            let carriesTheRequest = stored?.starts(with: requested) == true
+            let contentChanged = Set(before ?? []) != Set(stored ?? [])
+
+            if carriesTheRequest || contentChanged { reordered = nil }
         }
         .toolbar {
             if let playlist {
