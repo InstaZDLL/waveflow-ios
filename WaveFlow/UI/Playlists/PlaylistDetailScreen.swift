@@ -18,13 +18,16 @@ struct PlaylistDetailScreen: View {
     @State private var renamedName = ""
     @State private var deleting = false
 
-    /// Ordre affiché tant que le stockage n'a pas répondu.
+    /// Ordre affiché tant que le stockage n'a pas rendu le même.
     ///
     /// Une liste qu'on réordonne doit suivre le doigt : le déposé est rendu
     /// avant l'aller-retour d'écriture, sinon la ligne lâchée revient à sa
-    /// place le temps que le flux réémette. Remis à `nil` dès que le stockage
-    /// a tranché — qu'il ait retenu l'ordre ou refusé de l'écrire — parce que
-    /// c'est lui qui dit vrai. Même rôle que le `working` d'Android.
+    /// place le temps que le flux réémette. Même rôle que le `working`
+    /// d'Android.
+    ///
+    /// Il tombe quand le stockage a répondu la même chose, et quand il a refusé
+    /// d'écrire. Il cesse aussi de s'appliquer si le contenu de la playlist
+    /// bouge — voir [displayedSongs(of:)].
     @State private var reordered: [Song]?
 
     private var playlist: Playlist? { store.playlist(playlistId) }
@@ -36,7 +39,7 @@ struct PlaylistDetailScreen: View {
                 // accès parcourt toute la playlist contre l'index de la
                 // bibliothèque, et l'en-tête, la liste et le pied en avaient
                 // besoin séparément.
-                content(for: playlist, songs: reordered ?? playlist.songs(in: libraryStore.library))
+                content(for: playlist, songs: displayedSongs(of: playlist))
             } else {
                 // La playlist vient d'être supprimée — depuis cet écran ou un
                 // autre. On le dit plutôt que d'afficher une coquille vide.
@@ -45,10 +48,19 @@ struct PlaylistDetailScreen: View {
         }
         .navigationTitle(playlist?.name ?? "Playlist")
         .navigationBarTitleDisplayMode(.inline)
-        // Le stockage a parlé : ce qu'il rend fait foi, y compris quand un
-        // retrait ou un ajout venu d'ailleurs a changé la playlist pendant le
-        // geste.
-        .onChange(of: playlist?.songIds) { reordered = nil }
+        // Le stockage a rattrapé l'affichage : l'ordre optimiste n'a plus lieu
+        // d'être. Une émission qui ne le porte pas vient d'une écriture plus
+        // ancienne — deux glissés rapprochés partent dans deux écritures
+        // sérialisées — et l'effacer là ramènerait l'ordre intermédiaire sous
+        // le doigt, avant que la seconde écriture ne réémette.
+        //
+        // `starts(with:)` plutôt qu'une égalité : la normalisation range à la
+        // suite les morceaux introuvables sur l'appareil, que l'écran n'a pas
+        // listés et n'a donc pas pu demander.
+        .onChange(of: playlist?.songIds) { _, stored in
+            guard let reordered, let stored, stored.starts(with: reordered.map(\.id)) else { return }
+            self.reordered = nil
+        }
         .toolbar {
             if let playlist {
                 // iOS ne réordonne pas une liste hors du mode édition, là où
@@ -95,6 +107,23 @@ struct PlaylistDetailScreen: View {
         } message: {
             Text("Les morceaux restent sur l'appareil.")
         }
+    }
+
+    /// Morceaux à afficher, l'ordre optimiste appliqué tant qu'il tient.
+    ///
+    /// Il cesse de tenir dès que le contenu bouge — un retrait par balayage,
+    /// un ajout depuis un autre écran : il décrit alors une playlist qui
+    /// n'existe plus, et l'appliquer afficherait un titre qui n'en fait plus
+    /// partie. Comparer les ensembles suffit, les identifiants d'une playlist
+    /// étant uniques.
+    private func displayedSongs(of playlist: Playlist) -> [Song] {
+        let stored = playlist.songs(in: libraryStore.library)
+
+        guard let reordered,
+              Set(reordered.map(\.id)) == Set(stored.map(\.id))
+        else { return stored }
+
+        return reordered
     }
 
     private func content(for playlist: Playlist, songs: [Song]) -> some View {

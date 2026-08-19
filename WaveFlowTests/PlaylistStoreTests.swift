@@ -195,6 +195,22 @@ struct PlaylistStoreTests {
         #expect(store.writeFailure?.message == "Impossible de réordonner la playlist.")
     }
 
+    /// Une écriture seulement abandonnée n'a pas plus été retenue par le
+    /// stockage qu'une écriture ratée : l'écran doit la reprendre aussi.
+    ///
+    /// Mais sans alerte — l'abandon vient de l'application, pas d'une panne, et
+    /// il n'y a rien à en dire à l'utilisateur.
+    @Test func handsBackAnAbandonedReorderWithoutAlerting() async throws {
+        let store = PlaylistStore(repository: StubPlaylistRepository(writeError: CancellationError()))
+        var handedBack = false
+
+        store.reorder(UUID(), to: ["a"], onFailure: { handedBack = true })
+        await store.waitForWrites()
+
+        #expect(handedBack)
+        #expect(store.writeFailure == nil)
+    }
+
     /// Et ne le reprend pas quand elle aboutit : l'écran a déjà le bon ordre,
     /// le lui faire relire ferait clignoter la liste à chaque glissé.
     @Test func leavesAnAcceptedReorderAlone() async throws {
