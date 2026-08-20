@@ -4,14 +4,8 @@ import Testing
 
 /// Les appels d'authentification, contre un serveur simulé.
 ///
-/// Sérialisée : `URLSession` instancie elle-même le protocole d'interception,
-/// donc la réponse à rendre ne peut être posée que sur un emplacement statique
-/// — un seul pour toute la suite. Deux tests qui s'exécuteraient en parallèle y
-/// écriraient chacun la leur, et recevraient celle de l'autre.
-///
 /// - Note: exclue du harnais Linux : elle intercepte les requêtes par
 ///   `URLProtocol`, dont le comportement diffère hors plateformes Apple.
-@Suite(.serialized)
 struct AuthClientTests {
 
     private let server = ServerAddress("https://music.example.com")!
@@ -68,15 +62,15 @@ struct AuthClientTests {
 
     @Test func exchangesTheCodeAndDatesTheExpiry() async throws {
         let received = Date(timeIntervalSince1970: 1_000)
+        let stub = StubServer()
+        stub.respond(status: 200, body: Self.tokens)
 
-        let session = try await StubServer.serving { _ in (200, Self.tokens) } during: {
-            try await client(now: received).exchange(code: "un-code", with: pkce)
-        }
+        let session = try await client(stub, now: received).exchange(code: "un-code", with: pkce)
 
         // Les vérifications de la requête sont ici, pas dans le gestionnaire :
         // là-bas, une requête jamais émise n'y ferait échouer personne — elles
         // ne seraient tout simplement pas atteintes.
-        let request = try #require(StubServer.served.first)
+        let request = try #require(stub.served.first)
         #expect(request.url?.path == "/api/v2/oauth/token")
         #expect(request.method == "POST")
 
@@ -96,23 +90,23 @@ struct AuthClientTests {
     }
 
     @Test func rejectsTheExchangeWithTheServersOwnError() async throws {
-        try await StubServer.serving { _ in
-            (401, Data(#"{"code":"unauthorized","message":"non"}"#.utf8))
-        } during: {
-            await #expect(throws: ServerError.unauthorized) {
-                try await client().exchange(code: "code-consomme", with: pkce)
-            }
+        let stub = StubServer()
+        stub.respond(status: 401, body: Data(#"{"code":"unauthorized","message":"non"}"#.utf8))
+
+        await #expect(throws: ServerError.unauthorized) {
+            try await client(stub).exchange(code: "code-consomme", with: pkce)
         }
     }
 
     // MARK: - Le rafraîchissement
 
     @Test func sendsTheRefreshTokenAndReplacesThePair() async throws {
-        let refreshed = try await StubServer.serving { _ in (200, Self.tokens) } during: {
-            try await client().refresh(session(refreshToken: "wfr_ancien"))
-        }
+        let stub = StubServer()
+        stub.respond(status: 200, body: Self.tokens)
 
-        let request = try #require(StubServer.served.first)
+        let refreshed = try await client(stub).refresh(session(refreshToken: "wfr_ancien"))
+
+        let request = try #require(stub.served.first)
         #expect(request.url?.path == "/api/v2/auth/refresh")
 
         let sent = try JSONDecoder().decode([String: String].self, from: #require(request.body))
@@ -129,11 +123,12 @@ struct AuthClientTests {
     /// jetons parce que le serveur n'a pas répondu serait le contraire de ce
     /// qu'il a demandé.
     @Test func logsOutWithoutReportingAFailure() async throws {
-        await StubServer.serving { _ in (503, Data()) } during: {
-            await client().logout(session(accessToken: "wfa_courant"))
-        }
+        let stub = StubServer()
+        stub.respond(status: 503)
 
-        let request = try #require(StubServer.served.first)
+        await client(stub).logout(session(accessToken: "wfa_courant"))
+
+        let request = try #require(stub.served.first)
         #expect(request.url?.path == "/api/v2/auth/logout")
         #expect(request.headers["Authorization"] == "Bearer wfa_courant")
     }
@@ -155,8 +150,11 @@ struct AuthClientTests {
         }
         """.utf8)
 
-    private func client(now: Date = Date(timeIntervalSince1970: 0)) -> AuthClient {
-        AuthClient(server: server, session: StubServer.makeSession(), now: { now })
+    private func client(
+        _ stub: StubServer = StubServer(),
+        now: Date = Date(timeIntervalSince1970: 0),
+    ) -> AuthClient {
+        AuthClient(server: server, session: stub.session, now: { now })
     }
 
     private func session(accessToken: String = "wfa_x", refreshToken: String = "wfr_x") -> ServerSession {
@@ -168,122 +166,5 @@ struct AuthClientTests {
             userId: UUID(),
             username: "listener",
         )
-    }
-}
-
-/// Une requête interceptée, corps déjà lu.
-///
-/// `URLProtocol` vide `httpBody` et ne laisse qu'un flux, qui ne se lit qu'une
-/// fois : le retenir dans la requête elle-même rendrait `nil` à qui la relit.
-private struct ServedRequest: Sendable {
-    let url: URL?
-    let method: String?
-    let headers: [String: String]
-    let body: Data?
-}
-
-/// Un serveur simulé, branché sous `URLSession` par `URLProtocol`.
-private nonisolated final class StubServer: URLProtocol, @unchecked Sendable {
-
-    /// La réponse à rendre, et les requêtes servies.
-    ///
-    /// Statiques parce que `URLSession` instancie le protocole elle-même : rien
-    /// ne permet de lui passer une fermeture autrement. Le verrou protège la
-    /// lecture faite depuis le thread de la requête — c'est la sérialisation de
-    /// la suite, pas lui, qui garantit qu'un seul test s'en sert à la fois.
-    nonisolated(unsafe) private static var handler: (@Sendable (URLRequest) -> (Int, Data))?
-    nonisolated(unsafe) private static var requests: [ServedRequest] = []
-    private static let lock = NSLock()
-
-    static var served: [ServedRequest] { lock.withLock { requests } }
-
-    /// Installe une réponse le temps du corps, et la retire ensuite — y compris
-    /// si le corps lève.
-    ///
-    /// Portée plutôt que posée une fois pour toutes : un emplacement statique
-    /// qu'on ne vide jamais laisse un test qui aurait oublié d'installer la
-    /// sienne s'exécuter contre celle du test précédent, et passer pour de
-    /// mauvaises raisons. Sans gestionnaire, une requête échoue franchement.
-    @discardableResult
-    static func serving<T>(
-        _ handler: @escaping @Sendable (URLRequest) -> (Int, Data),
-        during body: () async throws -> T,
-    ) async rethrows -> T {
-        lock.withLock {
-            Self.handler = handler
-            requests = []
-        }
-        // Les requêtes servies restent lisibles après coup : c'est là que les
-        // tests les vérifient.
-        defer { lock.withLock { Self.handler = nil } }
-
-        return try await body()
-    }
-
-    static func makeSession() -> URLSession {
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [StubServer.self]
-        return URLSession(configuration: configuration)
-    }
-
-    override class func canInit(with request: URLRequest) -> Bool { true }
-    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
-    override func stopLoading() {}
-
-    override func startLoading() {
-        let handler = Self.lock.withLock { Self.handler }
-        guard let handler else {
-            client?.urlProtocol(self, didFailWithError: URLError(.unsupportedURL))
-            return
-        }
-
-        do {
-            let served = ServedRequest(
-                url: request.url,
-                method: request.httpMethod,
-                headers: request.allHTTPHeaderFields ?? [:],
-                body: try request.readBody(),
-            )
-            Self.lock.withLock { Self.requests.append(served) }
-
-            let (status, body) = handler(request)
-            let response = HTTPURLResponse(
-                url: request.url!,
-                statusCode: status,
-                httpVersion: "HTTP/1.1",
-                headerFields: ["Content-Type": "application/json"],
-            )!
-            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-            client?.urlProtocol(self, didLoad: body)
-            client?.urlProtocolDidFinishLoading(self)
-        } catch {
-            client?.urlProtocol(self, didFailWithError: error)
-        }
-    }
-}
-
-private nonisolated extension URLRequest {
-
-    /// Le corps de la requête, où qu'il soit.
-    ///
-    /// Une lecture négative est une panne du flux, pas une fin : la confondre
-    /// avec `0` rendrait un corps tronqué, et l'appelant verrait un échec de
-    /// décodage à la place de la cause.
-    func readBody() throws -> Data? {
-        if let httpBody { return httpBody }
-        guard let stream = httpBodyStream else { return nil }
-
-        stream.open()
-        defer { stream.close() }
-
-        var data = Data()
-        var buffer = [UInt8](repeating: 0, count: 4096)
-        while stream.hasBytesAvailable {
-            let read = stream.read(&buffer, maxLength: buffer.count)
-            if read < 0 { throw stream.streamError ?? URLError(.cannotParseResponse) }
-            if read == 0 { break }
-            data.append(buffer, count: read)
-        }
-        return data
     }
 }
