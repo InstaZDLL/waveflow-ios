@@ -141,7 +141,32 @@ final class ServerConnection {
 
         do {
             let session = try await task.value
-            try persist(StoredConnection(address: connection.address, session: session))
+
+            // Une déconnexion a pu passer pendant l'attente. Réinstaller la
+            // session ici la ressusciterait — et réécrirait au trousseau des
+            // jetons que l'utilisateur vient de demander d'oublier.
+            //
+            // Défensif faute de pouvoir être éprouvé : quand la déconnexion
+            // arrive assez tôt, elle annule la tâche et l'on n'atteint jamais
+            // cette ligne. Elle ne compte que si la requête s'est terminée
+            // avant, sa reprise attendant derrière la déconnexion — un
+            // entrelacement qu'aucun test ne sait ordonner.
+            guard self.connection?.session == connection.session else {
+                throw ServerError.unauthorized
+            }
+
+            let refreshed = StoredConnection(address: connection.address, session: session)
+            self.connection = refreshed
+
+            // L'enregistrement passe après, et son échec ne fait pas échouer
+            // l'appel — contrairement à la connexion initiale. À ce stade
+            // l'ancien jeton de rafraîchissement est déjà consommé : refuser le
+            // nouveau parce que le trousseau n'a pas voulu de lui laisserait
+            // une session morte en mémoire, et le prochain appel se ferait
+            // refuser pour de bon. Au pire la connexion ne survivra pas au
+            // prochain démarrage.
+            try? storage.save(refreshed)
+
             return session
         } catch ServerError.unauthorized {
             // Le jeton de rafraîchissement est mort — révoqué, ou déjà échangé.
@@ -155,11 +180,13 @@ final class ServerConnection {
 
     // MARK: - Interne
 
-    /// Retient la connexion, en mémoire et sur disque.
+    /// Retient une connexion neuve, sur disque puis en mémoire.
     ///
-    /// L'écriture d'abord : si le trousseau refuse, mieux vaut le dire tout de
-    /// suite que de laisser une session qui aura disparu au prochain
-    /// démarrage, sans que personne ne sache pourquoi.
+    /// L'écriture d'abord : à la connexion, un trousseau qui refuse doit se
+    /// dire tout de suite plutôt que de laisser une session qui aura disparu au
+    /// prochain démarrage sans que personne ne sache pourquoi. Rien n'est perdu
+    /// à recommencer — le raisonnement s'inverse au rafraîchissement, où
+    /// l'ancien jeton est déjà dépensé ; voir [validSession].
     private func persist(_ connection: StoredConnection) throws {
         try storage.save(connection)
         self.connection = connection

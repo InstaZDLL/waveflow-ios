@@ -109,9 +109,20 @@ nonisolated final class InMemorySessionStorage: SessionStorage, @unchecked Senda
     /// tomber l'application.
     private let failure: Error?
 
-    init(_ stored: StoredConnection? = nil, failing failure: Error? = nil) {
+    /// Panne à l'écriture seulement : un trousseau qui rend ce qu'il a mais
+    /// refuse d'en prendre plus. C'est le cas qui distingue une connexion
+    /// initiale — rien n'est perdu à recommencer — d'un rafraîchissement, où
+    /// l'ancien jeton est déjà dépensé.
+    private let writeFailure: Error?
+
+    init(
+        _ stored: StoredConnection? = nil,
+        failing failure: Error? = nil,
+        failingWrites writeFailure: Error? = nil,
+    ) {
         self.stored = stored
         self.failure = failure
+        self.writeFailure = writeFailure
     }
 
     func load() throws -> StoredConnection? {
@@ -120,7 +131,7 @@ nonisolated final class InMemorySessionStorage: SessionStorage, @unchecked Senda
     }
 
     func save(_ connection: StoredConnection) throws {
-        if let failure { throw failure }
+        if let failure = failure ?? writeFailure { throw failure }
         lock.withLock { stored = connection }
     }
 

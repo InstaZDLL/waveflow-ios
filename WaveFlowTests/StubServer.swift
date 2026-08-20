@@ -15,7 +15,10 @@ nonisolated final class StubServer: @unchecked Sendable {
     /// L'en-tête qui rattache une requête à son serveur simulé.
     fileprivate static let header = "X-Stub-Server"
 
-    fileprivate nonisolated(unsafe) static var registry: [String: StubServer] = [:]
+    /// Références faibles : un registre qui retient ses entrées empêcherait
+    /// `deinit` de s'exécuter, donc l'entrée d'être retirée — chaque serveur
+    /// simulé survivrait à son test, avec sa `URLSession` et ses requêtes.
+    fileprivate nonisolated(unsafe) static var registry: [String: WeakStub] = [:]
     fileprivate static let registryLock = NSLock()
 
     private let id = UUID().uuidString
@@ -35,7 +38,7 @@ nonisolated final class StubServer: @unchecked Sendable {
         configuration.httpAdditionalHeaders = [Self.header: id]
         session = URLSession(configuration: configuration)
 
-        Self.registryLock.withLock { Self.registry[id] = self }
+        Self.registryLock.withLock { Self.registry[id] = WeakStub(self) }
     }
 
     deinit {
@@ -80,6 +83,12 @@ nonisolated struct ServedRequest: Sendable {
     let body: Data?
 }
 
+/// Un `Dictionary` ne sait pas tenir ses valeurs faiblement ; cette boîte, si.
+fileprivate nonisolated final class WeakStub: @unchecked Sendable {
+    weak var stub: StubServer?
+    init(_ stub: StubServer) { self.stub = stub }
+}
+
 private nonisolated final class StubServerProtocol: URLProtocol, @unchecked Sendable {
 
     override class func canInit(with request: URLRequest) -> Bool { true }
@@ -88,7 +97,7 @@ private nonisolated final class StubServerProtocol: URLProtocol, @unchecked Send
 
     override func startLoading() {
         let stub = request.value(forHTTPHeaderField: StubServer.header).flatMap { id in
-            StubServer.registryLock.withLock { StubServer.registry[id] }
+            StubServer.registryLock.withLock { StubServer.registry[id]?.stub }
         }
 
         do {
@@ -128,12 +137,15 @@ private nonisolated extension URLRequest {
 
         var data = Data()
         var buffer = [UInt8](repeating: 0, count: 4096)
-        while stream.hasBytesAvailable {
+        // Lire jusqu'à zéro, sans consulter `hasBytesAvailable` : celui-ci
+        // n'est pas une fin de flux mais une indication, fausse tant que la
+        // première lecture n'a pas eu lieu sur certains flux. S'y fier rendait
+        // un corps vide qui passait pour un corps.
+        while true {
             let read = stream.read(&buffer, maxLength: buffer.count)
             if read < 0 { throw stream.streamError ?? URLError(.cannotParseResponse) }
-            if read == 0 { break }
+            if read == 0 { return data }
             data.append(buffer, count: read)
         }
-        return data
     }
 }

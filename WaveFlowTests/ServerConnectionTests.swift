@@ -94,6 +94,23 @@ struct ServerConnectionTests {
         #expect(stub.served.count == 1)
     }
 
+    /// Un échange abandonné — navigateur refermé — ne doit pas rester ouvert :
+    /// une redirection tardive n'aurait plus à être honorée.
+    @Test func forgetsAnAbandonedSignIn() async throws {
+        let stub = StubServer()
+        stub.respond(status: 200, body: Self.tokens)
+        let connection = make(stub: stub)
+
+        let state = try #require(stateParameter(of: connection.beginSignIn(to: address, deviceName: "iPhone")))
+        connection.cancelSignIn()
+
+        await connection.completeSignIn(callback: callback(code: "un-code", state: state))
+
+        #expect(connection.isConnected == false)
+        #expect(connection.failure == "Aucune connexion n'était en cours.")
+        #expect(stub.served.isEmpty)
+    }
+
     // MARK: - Déconnexion
 
     /// L'oubli local ne dépend pas de la réponse du serveur : l'utilisateur a
@@ -155,6 +172,50 @@ struct ServerConnectionTests {
 
         #expect(sessions.map(\.accessToken) == ["wfa_abc", "wfa_abc"])
         #expect(stub.served.count == 1)
+    }
+
+    /// Le trousseau peut refuser au pire moment : l'ancien jeton vient d'être
+    /// dépensé, et le nouveau est la seule chose qui vaille. Le garder en
+    /// mémoire quand même — sans quoi le prochain appel présenterait un jeton
+    /// mort et se ferait déconnecter. Au pire, la connexion ne survivra pas au
+    /// prochain démarrage.
+    @Test func keepsARefreshedSessionTheKeychainRefused() async throws {
+        let stub = StubServer()
+        stub.respond(status: 200, body: Self.tokens)
+        let storage = InMemorySessionStorage(stored(), failingWrites: KeychainError(status: -34018))
+        let connection = make(storage: storage, stub: stub, now: expiry)
+        connection.restore()
+
+        let session = try await connection.validSession()
+
+        #expect(session.accessToken == "wfa_abc")
+        #expect(connection.connection?.session.refreshToken == "wfr_def")
+        // Sur disque, c'est bien l'ancienne qui est restée.
+        #expect(try storage.load()?.session.accessToken == "wfa_stocke")
+    }
+
+    /// Une déconnexion demandée pendant un rafraîchissement l'emporte.
+    ///
+    /// Ce test emprunte le chemin de l'annulation : la tâche est encore en vol
+    /// quand la déconnexion l'annule. L'autre entrelacement — la tâche
+    /// terminée, sa reprise en attente derrière la déconnexion — est celui que
+    /// garde `validSession`, et je ne sais pas le forcer depuis un test : rien
+    /// ne permet d'ordonner la fin d'une requête et la reprise de son
+    /// appelant. La garde reste donc défensive, et c'est dit là-bas.
+    @Test func signsOutWhileARefreshIsInFlight() async throws {
+        let stub = StubServer()
+        stub.respond(status: 200, body: Self.tokens)
+        let storage = InMemorySessionStorage(stored())
+        let connection = make(storage: storage, stub: stub, now: expiry)
+        connection.restore()
+
+        async let refreshed: ServerSession = connection.validSession()
+        await connection.signOut()
+
+        _ = try? await refreshed
+
+        #expect(connection.isConnected == false)
+        #expect(try storage.load() == nil)
     }
 
     /// Un jeton de rafraîchissement refusé est mort — révoqué, ou déjà échangé.

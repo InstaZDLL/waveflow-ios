@@ -223,11 +223,12 @@ Swift Testing (`@Test` / `#expect`), dans `WaveFlowTests/`. Dix suites tournent 
 Six exigent un Mac et sont donc listées dans l'`exclude:` de `Tools/LinuxHarness/Package.swift` :
 `SwiftDataPlaylistRepositoryTests`, `PlaylistPersistenceTests`, `LibraryScannerTests`,
 `PKCETests` (CryptoKit), `AuthClientTests` et `ServerConnectionTests` (interception par
-`URLProtocol`, via le `StubServer` partagé — lui aussi exclu, c'est un helper et non une suite).
+`URLProtocol`, via le helper commun `StubServer` — lui aussi exclu, c'est un outil et non une
+suite).
 
-`StubServer` donne à chaque instance sa propre `URLSession` et son identité : les tests réseau
-tournent donc en parallèle sans se voir. Ne pas revenir à un emplacement statique partagé, qui
-obligeait à sérialiser les suites et laissait un test sans réponse installée s'exécuter contre
+`StubServer` donne à chaque instance sa propre `URLSession` et sa propre identité : les tests
+réseau tournent donc en parallèle sans se voir. Ne pas revenir à un emplacement statique partagé,
+qui obligeait à sérialiser les suites et laissait un test sans réponse installée s'exécuter contre
 celle du précédent.
 
 `LibraryScannerTests` fabrique ses fichiers audio au lieu d'en déposer dans le dépôt : du silence
