@@ -7,6 +7,13 @@ import Foundation
 /// invalide l'ancien. D'où une valeur unique plutôt que deux champs séparés :
 /// remplacer la paire d'un bloc est la seule façon de ne jamais garder un
 /// jeton d'accès neuf à côté d'un jeton de rafraîchissement déjà consommé.
+///
+/// - Important: cette valeur est `Codable` pour aller **au trousseau**, et pour
+///   rien d'autre. Ni `UserDefaults`, ni fichier, ni journal : le jeton de
+///   rafraîchissement ouvre des sessions jusqu'à sa révocation, et une
+///   sauvegarde d'appareil non chiffrée l'emporterait avec elle. `Codable`
+///   n'interdit rien tout seul — c'est écrit ici parce que rien d'autre ne le
+///   dira au moment de choisir où l'écrire.
 nonisolated struct ServerSession: Hashable, Sendable, Codable {
 
     let accessToken: String

@@ -43,12 +43,21 @@ struct ServerErrorTests {
         #expect(error == .validation(message: "nope"))
     }
 
-    /// Seuls le débit et l'indisponibilité se rejouent tels quels. Une requête
-    /// fautive le restera, et un conflit d'opération réclame un identifiant
-    /// neuf — donc une autre requête, pas la même.
-    @Test func onlyBackpressureAndOutagesAreWorthRetrying() {
+    /// Le débit, l'indisponibilité — et les pannes d'intermédiaire. Une requête
+    /// fautive, elle, le restera, et un conflit d'opération réclame un
+    /// identifiant neuf, donc une autre requête et pas la même.
+    @Test func retriesBackpressureOutagesAndGatewayFailures() {
         #expect(ServerError.rateLimited.isRetriable)
         #expect(ServerError.unavailable.isRetriable)
+
+        // 502 et 504 ne peuvent venir que d'un intermédiaire : le type d'erreur
+        // de l'API native ne sait produire que les sept statuts documentés.
+        #expect(ServerError.from(status: 502, body: Data())?.isRetriable == true)
+        #expect(ServerError.from(status: 504, body: Data())?.isRetriable == true)
+
+        // 500 non : c'est une panne que le serveur n'a pas su nommer, et la
+        // rejouer telle quelle la reproduit.
+        #expect(ServerError.from(status: 500, body: Data())?.isRetriable == false)
 
         #expect(ServerError.unauthorized.isRetriable == false)
         #expect(ServerError.notFound.isRetriable == false)

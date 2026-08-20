@@ -57,6 +57,19 @@ struct ServerAddressTests {
         #expect(address.origin.absoluteString == "https://music.example.com:8443")
     }
 
+    /// Une adresse peut arriver avec des identifiants — un gestionnaire de mots
+    /// de passe en fabrique, un vieux marque-page en garde. Les retenir, c'est
+    /// écrire un mot de passe en clair dans les préférences ; les refuser,
+    /// c'est arrêter quelqu'un dont l'adresse est bonne. L'origine est gardée,
+    /// les identifiants tombent.
+    @Test func stripsCredentialsFromTheAddress() throws {
+        let address = try #require(ServerAddress("https://listener:motdepasse@music.example.com"))
+
+        #expect(address.origin.absoluteString == "https://music.example.com")
+        #expect(address.origin.user == nil)
+        #expect(address.origin.password == nil)
+    }
+
     @Test func trimsSurroundingWhitespace() throws {
         let address = try #require(ServerAddress("  https://music.example.com \n"))
 

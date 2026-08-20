@@ -74,9 +74,21 @@ nonisolated enum ServerError: Error, Equatable {
     /// Ni `validation` ni `operationConflict` n'en sont : la première est
     /// fautive, la seconde exige un identifiant d'opération neuf — donc une
     /// autre requête, pas la même.
+    ///
+    /// 502 et 504 s'y ajoutent bien qu'absents du contrat, et c'est justement
+    /// pourquoi : l'API native n'a aucun moyen de les produire — son type
+    /// d'erreur ne connaît que les sept statuts documentés, et « réessayer
+    /// plus tard » s'y dit 503. Les recevoir signifie qu'un intermédiaire a
+    /// répondu à la place du serveur, sans l'avoir joint ou sans l'avoir
+    /// attendu assez. C'est transitoire par nature.
+    ///
+    /// 500 n'y est pas, pour la même raison lue à l'envers : il ne peut venir
+    /// que d'une panne que le serveur n'a pas su nommer, et la rejouer telle
+    /// quelle la reproduit.
     var isRetriable: Bool {
         switch self {
         case .rateLimited, .unavailable: true
+        case .unexpected(let status, _): status == 502 || status == 504
         default: false
         }
     }
