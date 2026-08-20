@@ -60,6 +60,8 @@ let package = Package(
                 "SwiftDataPlaylistRepositoryTests.swift",
                 "PlaylistPersistenceTests.swift",
                 "LibraryScannerTests.swift",
+                "PKCETests.swift",
+                "AuthClientTests.swift",
             ],
             swiftSettings: settings,
         ),
