@@ -35,7 +35,11 @@ nonisolated struct AuthClient: Sendable {
     /// L'adresse à ouvrir dans le navigateur système.
     ///
     /// Sous `/authorize` et non `/api/v2` : c'est une page de l'interface
-    /// embarquée, pas un appel d'API.
+    /// Builds the authorization URL for a device authentication flow.
+    /// - Parameters:
+    ///   - pkce: The PKCE challenge and state used for authorization.
+    ///   - deviceName: The name of the device requesting authorization.
+    /// - Returns: The server authorization URL containing the client, redirect, PKCE, state, and device parameters.
     func authorizationURL(for pkce: PKCE, deviceName: String) -> URL {
         var components = URLComponents(url: server.root("authorize"), resolvingAgainstBaseURL: false)!
         components.queryItems = [
@@ -53,7 +57,11 @@ nonisolated struct AuthClient: Sendable {
     ///
     /// L'état est comparé ici plutôt que chez l'appelant : c'est la seule
     /// vérification qui distingue une réponse à notre demande d'une réponse
-    /// fabriquée, et la laisser facultative reviendrait à ne pas l'avoir.
+    /// Extracts the authorization code from a callback URL when its state matches the PKCE state.
+    /// - Parameters:
+    ///   - callback: The authorization callback URL.
+    ///   - pkce: The PKCE state used to validate the callback.
+    /// - Returns: The nonblank authorization code, or `nil` when the callback state does not match or no code is present.
     static func authorizationCode(from callback: URL, matching pkce: PKCE) -> String? {
         guard let items = URLComponents(url: callback, resolvingAgainstBaseURL: false)?.queryItems,
               let state = items.first(where: { $0.name == "state" })?.value,
@@ -68,7 +76,11 @@ nonisolated struct AuthClient: Sendable {
     ///
     /// Un code expire au bout de dix minutes et **est consommé par la première
     /// requête, y compris ratée** : en cas d'échec, il faut relancer
-    /// l'autorisation, jamais rejouer le même code.
+    /// Exchanges an authorization code and PKCE verifier for a server session.
+    /// - Parameters:
+    ///   - code: The authorization code received from the server.
+    ///   - pkce: The PKCE data used to verify the authorization request.
+    /// - Returns: The authenticated server session.
     func exchange(code: String, with pkce: PKCE) async throws -> ServerSession {
         try await post(server.api("oauth/token"), body: [
             "code": code,
@@ -81,7 +93,9 @@ nonisolated struct AuthClient: Sendable {
     /// Rafraîchit la session.
     ///
     /// Le jeton rendu remplace l'ancien : le serveur le fait tourner, et
-    /// rejouer un jeton déjà échangé ne mène nulle part.
+    /// Renews an authenticated server session using its refresh token.
+    /// - Parameter session: The session whose refresh token is used.
+    /// - Returns: The replacement server session.
     func refresh(_ session: ServerSession) async throws -> ServerSession {
         try await post(server.api("auth/refresh"), body: ["refresh_token": session.refreshToken])
     }
@@ -90,7 +104,9 @@ nonisolated struct AuthClient: Sendable {
     ///
     /// Un échec n'est pas remonté : l'appelant efface la session de toute
     /// façon, et lui faire garder des jetons parce que le serveur n'a pas
-    /// répondu serait le contraire de ce qu'il a demandé.
+    /// Logs out the specified server session.
+    ///
+    /// - Parameter session: The authenticated session to terminate.
     func logout(_ session: ServerSession) async {
         var request = URLRequest(url: server.api("auth/logout"))
         request.httpMethod = "POST"
@@ -98,6 +114,12 @@ nonisolated struct AuthClient: Sendable {
         _ = try? await self.session.data(for: request)
     }
 
+    /// Sends an authentication request and produces the resulting server session.
+    /// - Parameters:
+    ///   - url: The endpoint to request.
+    ///   - body: The JSON fields included in the request.
+    /// - Returns: The authenticated server session.
+    /// - Throws: An error if the request fails, the server reports an error, or the response cannot be decoded.
     private func post(_ url: URL, body: [String: String]) async throws -> ServerSession {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"

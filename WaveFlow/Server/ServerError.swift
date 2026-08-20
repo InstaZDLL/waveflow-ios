@@ -46,7 +46,11 @@ nonisolated enum ServerError: Error, Equatable {
     /// Lit le statut et, quand il en faut un, le code du corps.
     ///
     /// `body` est le corps brut plutôt qu'un code déjà extrait : seul 409 en a
-    /// besoin, et le décoder à chaque réponse coûterait pour rien.
+    /// Classifies an HTTP response as a server error.
+    /// - Parameters:
+    ///   - status: The HTTP status code.
+    ///   - body: The response body containing optional error details.
+    /// - Returns: The corresponding `ServerError`, or `nil` for successful 2xx responses.
     static func from(status: Int, body: Data) -> ServerError? {
         guard !(200..<300).contains(status) else { return nil }
 

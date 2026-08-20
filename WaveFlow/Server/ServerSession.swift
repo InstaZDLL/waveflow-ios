@@ -36,7 +36,11 @@ nonisolated struct ServerSession: Hashable, Sendable, Codable {
     ///
     /// La marge couvre le trajet de la requête : un jeton valable encore deux
     /// secondes au moment du test peut arriver périmé, et le 401 qui s'ensuit
-    /// coûte un aller-retour de plus que de l'avoir rafraîchi d'emblée.
+    /// Determines whether the session has expired at the specified date, accounting for a safety margin.
+    /// - Parameters:
+    ///   - date: The date at which to evaluate expiration.
+    ///   - margin: The safety margin, in seconds.
+    /// - Returns: `true` if the date plus the margin reaches or exceeds the session's expiration date, `false` otherwise.
     func isExpired(at date: Date, margin: TimeInterval = 30) -> Bool {
         date.addingTimeInterval(margin) >= expiresAt
     }
@@ -60,7 +64,9 @@ nonisolated struct AuthTokensPayload: Decodable, Sendable {
         let username: String
     }
 
-    /// Date la durée reçue et laisse tomber le reste.
+    /// Creates an authenticated server session using the payload's tokens, identity, device identifier, and expiration duration.
+    /// - Parameter now: The date when the authentication response was received.
+    /// - Returns: A server session with an absolute access-token expiration date.
     func session(receivedAt now: Date) -> ServerSession {
         ServerSession(
             accessToken: accessToken,

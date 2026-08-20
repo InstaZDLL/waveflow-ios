@@ -56,13 +56,17 @@ nonisolated struct ServerAddress: Hashable, Sendable, Codable {
     /// Chemin absolu de l'API, `/api/v2` compris.
     ///
     /// Les appelants nomment la route telle qu'elle apparaît dans le guide —
-    /// `auth/refresh`, `sync/changes` — et le préfixe est posé ici, une fois.
+    /// Builds a URL for a path under the server's versioned API endpoint.
+    /// - Parameter path: The path to append under `/api/v2`.
+    /// - Returns: The resulting API URL.
     func api(_ path: String) -> URL {
         origin.appending(path: "api/v2").appending(path: path)
     }
 
     /// Chemin absolu hors API : les sondes et l'écran d'autorisation, qui ne
-    /// sont pas sous `/api/v2`.
+    /// Builds a URL for a path relative to the server origin.
+    /// - Parameter path: The path to append to the server origin.
+    /// - Returns: The resulting URL.
     func root(_ path: String) -> URL {
         origin.appending(path: path)
     }

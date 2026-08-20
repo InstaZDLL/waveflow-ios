@@ -51,7 +51,8 @@ nonisolated extension Data {
     /// Base64 pour URL : `+` et `/` remplacés, remplissage retiré.
     ///
     /// C'est la forme qu'exige PKCE, et le serveur refuse un défi qui n'a pas
-    /// exactement 43 caractères — ce que le remplissage lui ferait dépasser.
+    /// Encodes the data as an unpadded Base64URL string.
+    /// - Returns: The Base64URL-encoded string.
     func base64URLEncodedString() -> String {
         base64EncodedString()
             .replacingOccurrences(of: "+", with: "-")
