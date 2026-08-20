@@ -62,6 +62,8 @@ let package = Package(
                 "LibraryScannerTests.swift",
                 "PKCETests.swift",
                 "AuthClientTests.swift",
+                "StubServer.swift",
+                "ServerConnectionTests.swift",
             ],
             swiftSettings: settings,
         ),
