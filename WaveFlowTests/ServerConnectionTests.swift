@@ -194,7 +194,8 @@ struct ServerConnectionTests {
         #expect(try storage.load()?.session.accessToken == "wfa_stocke")
     }
 
-    /// Une déconnexion demandée pendant un rafraîchissement l'emporte.
+    /// Une déconnexion demandée alors qu'un rafraîchissement est parti
+    /// l'emporte.
     ///
     /// Ce test emprunte le chemin de l'annulation : la tâche est encore en vol
     /// quand la déconnexion l'annule. L'autre entrelacement — la tâche
@@ -210,6 +211,11 @@ struct ServerConnectionTests {
         connection.restore()
 
         async let refreshed: ServerSession = connection.validSession()
+
+        // Attendre que la requête soit partie avant de déconnecter. Sans ce
+        // rendez-vous, la déconnexion pourrait précéder l'appel entier : le
+        // test passerait en n'ayant jamais eu de rafraîchissement en vol.
+        await stub.requestReceived()
         await connection.signOut()
 
         _ = try? await refreshed

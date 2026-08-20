@@ -25,6 +25,7 @@ nonisolated final class StubServer: @unchecked Sendable {
     private let lock = NSLock()
     private var handler: (@Sendable (URLRequest) -> (Int, Data))?
     private var requests: [ServedRequest] = []
+    private var waiters: [CheckedContinuation<Void, Never>] = []
 
     /// Les requêtes reçues, dans l'ordre.
     var served: [ServedRequest] { lock.withLock { requests } }
@@ -56,19 +57,53 @@ nonisolated final class StubServer: @unchecked Sendable {
         respond { _ in (status, body) }
     }
 
+    /// Attend qu'une requête soit parvenue jusqu'ici.
+    ///
+    /// Ce qu'il faut à un test qui veut agir *pendant* un appel : sans ce
+    /// point de rendez-vous, il agirait peut-être avant que l'appel ait
+    /// commencé, et vérifierait alors tout autre chose que ce qu'il annonce.
+    /// Rend la main tout de suite si une requête est déjà arrivée.
+    func requestReceived() async {
+        await withCheckedContinuation { continuation in
+            let alreadyServed = lock.withLock {
+                guard requests.isEmpty else { return true }
+                waiters.append(continuation)
+                return false
+            }
+            if alreadyServed { continuation.resume() }
+        }
+    }
+
     fileprivate func serve(_ request: URLRequest) throws -> (Int, Data)? {
         let handler = lock.withLock { self.handler }
         guard let handler else { return nil }
 
+        let body = try request.readBody()
         let served = ServedRequest(
             url: request.url,
             method: request.httpMethod,
             headers: request.allHTTPHeaderFields ?? [:],
-            body: try request.readBody(),
+            body: body,
         )
-        lock.withLock { requests.append(served) }
 
-        return handler(request)
+        let waiting = lock.withLock {
+            requests.append(served)
+            defer { waiters = [] }
+            return waiters
+        }
+        waiting.forEach { $0.resume() }
+
+        // Le corps est reposé dans la requête transmise : `URLProtocol` ne
+        // laisse qu'un flux, qui vient d'être lu et ne se relit pas. Un
+        // gestionnaire qui inspecterait `httpBody` n'y trouverait rien, sans
+        // rien pour le lui dire.
+        // Le flux d'abord : poser `httpBody` alors qu'un flux est encore là
+        // ne le remplace pas, et le gestionnaire relirait un flux épuisé.
+        var forwarded = request
+        forwarded.httpBodyStream = nil
+        forwarded.httpBody = body
+
+        return handler(forwarded)
     }
 }
 

@@ -89,6 +89,25 @@ struct AuthClientTests {
         #expect(session.expiresAt == received.addingTimeInterval(900))
     }
 
+    /// Le gestionnaire du serveur simulé doit pouvoir lire le corps qu'il
+    /// reçoit : `URLProtocol` ne laisse qu'un flux, déjà consommé au moment où
+    /// il est appelé, et il n'y trouverait rien sans rien pour l'en avertir.
+    @Test func handsTheRequestBodyToTheStubHandler() async throws {
+        let stub = StubServer()
+        stub.respond { request in
+            guard let body = request.httpBody,
+                  let sent = try? JSONDecoder().decode([String: String].self, from: body),
+                  sent["refresh_token"] == "wfr_attendu"
+            else { return (400, Data()) }
+
+            return (200, Self.tokens)
+        }
+
+        let refreshed = try await client(stub).refresh(session(refreshToken: "wfr_attendu"))
+
+        #expect(refreshed.accessToken == "wfa_abc")
+    }
+
     @Test func rejectsTheExchangeWithTheServersOwnError() async throws {
         let stub = StubServer()
         stub.respond(status: 401, body: Data(#"{"code":"unauthorized","message":"non"}"#.utf8))

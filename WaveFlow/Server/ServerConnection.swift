@@ -151,8 +151,11 @@ final class ServerConnection {
             // cette ligne. Elle ne compte que si la requête s'est terminée
             // avant, sa reprise attendant derrière la déconnexion — un
             // entrelacement qu'aucun test ne sait ordonner.
-            guard self.connection?.session == connection.session else {
-                throw ServerError.unauthorized
+            //
+            // L'échec est une annulation et non un refus : le serveur n'a rien
+            // refusé, c'est l'état local qui est passé à autre chose.
+            guard self.connection == connection else {
+                throw CancellationError()
             }
 
             let refreshed = StoredConnection(address: connection.address, session: session)
@@ -172,8 +175,15 @@ final class ServerConnection {
             // Le jeton de rafraîchissement est mort — révoqué, ou déjà échangé.
             // Rien ne le ranimera : garder la connexion ferait boucler chaque
             // appel sur le même refus.
-            self.connection = nil
-            try? storage.clear()
+            //
+            // À condition que le refus porte encore sur la connexion courante :
+            // se déconnecter puis se reconnecter pendant l'attente ferait
+            // autrement effacer la nouvelle session sur un refus adressé à
+            // l'ancienne.
+            if self.connection == connection {
+                self.connection = nil
+                try? storage.clear()
+            }
             throw ServerError.unauthorized
         }
     }
