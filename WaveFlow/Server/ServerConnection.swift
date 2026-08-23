@@ -31,6 +31,19 @@ final class ServerConnection {
     /// Rafraîchissement en vol. Voir [validSession].
     private var refreshing: Task<ServerSession, Error>?
 
+    /// Change dès que la connexion cesse d'être celle qu'elle était :
+    /// déconnexion, refus définitif, ou connexion à un autre serveur. Un
+    /// rafraîchissement n'y touche pas — il prolonge la même connexion.
+    ///
+    /// Comparer la connexion elle-même ne suffirait pas : celui qui rejoint un
+    /// rafraîchissement en cours la retrouve remplacée par sa version
+    /// rafraîchie, qu'il n'a pourtant aucune raison de refuser.
+    private var generation = 0
+
+    /// Change à chaque tentative de connexion ouverte, abandonnée ou terminée.
+    /// Un échange qui aboutit après coup n'a plus rien à installer.
+    private var signInAttempt = 0
+
     private let storage: SessionStorage
     private let makeClient: @Sendable (ServerAddress) -> AuthClient
     private let now: @Sendable () -> Date
@@ -69,6 +82,7 @@ final class ServerConnection {
     func beginSignIn(to address: ServerAddress, deviceName: String) -> URL {
         let pkce = PKCE()
         pending = (pkce, address)
+        signInAttempt += 1
         failure = nil
 
         return makeClient(address).authorizationURL(for: pkce, deviceName: deviceName)
@@ -91,16 +105,27 @@ final class ServerConnection {
             return
         }
 
+        // L'échange peut durer, et la tentative être abandonnée entre-temps —
+        // ou remplacée par une autre. Ce qui en revient alors n'a plus à
+        // s'installer, ni même à se plaindre : le message porterait sur une
+        // tentative que l'utilisateur a déjà quittée.
+        let attempt = signInAttempt
+
         do {
             let session = try await makeClient(pending.address).exchange(code: code, with: pending.pkce)
+            guard attempt == signInAttempt else { return }
             try persist(StoredConnection(address: pending.address, session: session))
         } catch {
+            guard attempt == signInAttempt else { return }
             failure = Self.message(for: error)
         }
     }
 
     /// Abandonne un échange commencé — navigateur refermé, connexion annulée.
-    func cancelSignIn() { pending = nil }
+    func cancelSignIn() {
+        pending = nil
+        signInAttempt += 1
+    }
 
     // MARK: - Déconnexion
 
@@ -112,6 +137,8 @@ final class ServerConnection {
     func signOut() async {
         guard let connection else { return }
         self.connection = nil
+        generation += 1
+        signInAttempt += 1
         refreshing?.cancel()
         refreshing = nil
         try? storage.clear()
@@ -131,7 +158,15 @@ final class ServerConnection {
         guard let connection else { throw ServerError.unauthorized }
         guard connection.session.isExpired(at: now()) else { return connection.session }
 
-        if let refreshing { return try await refreshing.value }
+        let generation = self.generation
+
+        // Celui qui rejoint passe la même garde que celui qui a lancé : sans
+        // elle, une déconnexion survenue pendant l'attente le laisserait
+        // repartir avec des jetons dont plus personne ne veut.
+        if let refreshing {
+            let session = try await refreshing.value
+            return try stillCurrent(session, from: generation)
+        }
 
         let task = Task { [makeClient, connection] in
             try await makeClient(connection.address).refresh(connection.session)
@@ -140,23 +175,11 @@ final class ServerConnection {
         defer { refreshing = nil }
 
         do {
-            let session = try await task.value
-
-            // Une déconnexion a pu passer pendant l'attente. Réinstaller la
-            // session ici la ressusciterait — et réécrirait au trousseau des
-            // jetons que l'utilisateur vient de demander d'oublier.
-            //
-            // Défensif faute de pouvoir être éprouvé : quand la déconnexion
-            // arrive assez tôt, elle annule la tâche et l'on n'atteint jamais
-            // cette ligne. Elle ne compte que si la requête s'est terminée
-            // avant, sa reprise attendant derrière la déconnexion — un
-            // entrelacement qu'aucun test ne sait ordonner.
-            //
-            // L'échec est une annulation et non un refus : le serveur n'a rien
-            // refusé, c'est l'état local qui est passé à autre chose.
-            guard self.connection == connection else {
-                throw CancellationError()
-            }
+            // La connexion a pu changer pendant l'attente — déconnexion, ou
+            // connexion à un autre serveur. Réinstaller la session ici la
+            // ressusciterait dans le premier cas, et dans le second poserait
+            // les jetons d'un serveur sous l'adresse d'un autre.
+            let session = try stillCurrent(await task.value, from: generation)
 
             let refreshed = StoredConnection(address: connection.address, session: session)
             self.connection = refreshed
@@ -180,8 +203,9 @@ final class ServerConnection {
             // se déconnecter puis se reconnecter pendant l'attente ferait
             // autrement effacer la nouvelle session sur un refus adressé à
             // l'ancienne.
-            if self.connection == connection {
+            if self.generation == generation {
                 self.connection = nil
+                self.generation += 1
                 try? storage.clear()
             }
             throw ServerError.unauthorized
@@ -200,6 +224,17 @@ final class ServerConnection {
     private func persist(_ connection: StoredConnection) throws {
         try storage.save(connection)
         self.connection = connection
+        generation += 1
+    }
+
+    /// Rend la session si la connexion qu'elle prolonge est encore celle de
+    /// l'application, et abandonne sinon.
+    ///
+    /// L'échec est une annulation et non un refus : le serveur n'a rien
+    /// refusé, c'est l'état local qui est passé à autre chose.
+    private func stillCurrent(_ session: ServerSession, from generation: Int) throws -> ServerSession {
+        guard self.generation == generation else { throw CancellationError() }
+        return session
     }
 
     private static func message(for error: Error) -> String {

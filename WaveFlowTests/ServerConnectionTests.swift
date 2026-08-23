@@ -111,6 +111,29 @@ struct ServerConnectionTests {
         #expect(stub.served.isEmpty)
     }
 
+    /// Un échange qui aboutit après l'abandon de sa tentative n'a plus rien à
+    /// installer — ni session, ni message d'erreur : celui-ci porterait sur
+    /// une tentative que l'utilisateur a déjà quittée.
+    @Test func ignoresAnExchangeThatLandsAfterItsAttemptWasAbandoned() async throws {
+        let stub = StubServer()
+        stub.respond(status: 200, body: Self.tokens)
+        stub.hold(path: "/api/v2/oauth/token")
+        let storage = InMemorySessionStorage()
+        let connection = make(storage: storage, stub: stub)
+
+        let state = try #require(stateParameter(of: connection.beginSignIn(to: address, deviceName: "iPhone")))
+        async let finished: Void = connection.completeSignIn(callback: callback(code: "un-code", state: state))
+
+        await stub.requestReceived()
+        connection.cancelSignIn()
+        stub.releaseHeld()
+        await finished
+
+        #expect(connection.isConnected == false)
+        #expect(connection.failure == nil)
+        #expect(try storage.load() == nil)
+    }
+
     // MARK: - Déconnexion
 
     /// L'oubli local ne dépend pas de la réponse du serveur : l'utilisateur a
@@ -210,16 +233,108 @@ struct ServerConnectionTests {
         let connection = make(storage: storage, stub: stub, now: expiry)
         connection.restore()
 
+        // La réponse est retenue : savoir que la requête est partie ne suffit
+        // pas si elle se termine dans la foulée. Seul le chemin du
+        // rafraîchissement est bloqué — la déconnexion, elle, doit passer.
+        stub.hold(path: "/api/v2/auth/refresh")
+
         async let refreshed: ServerSession = connection.validSession()
 
-        // Attendre que la requête soit partie avant de déconnecter. Sans ce
-        // rendez-vous, la déconnexion pourrait précéder l'appel entier : le
-        // test passerait en n'ayant jamais eu de rafraîchissement en vol.
         await stub.requestReceived()
         await connection.signOut()
+        stub.releaseHeld()
 
         _ = try? await refreshed
 
+        #expect(connection.isConnected == false)
+        #expect(try storage.load() == nil)
+    }
+
+    /// Une connexion faite pendant un rafraîchissement l'emporte sur lui.
+    ///
+    /// C'est le chemin qui éprouve vraiment les gardes de génération : se
+    /// connecter ailleurs ne touche pas au rafraîchissement en cours, là où se
+    /// déconnecter l'annule. Sans elles, la session rafraîchie de l'ancien
+    /// serveur viendrait écraser la nouvelle — jetons d'un serveur, adresse
+    /// d'un autre — et celui qui a rejoint repartirait avec.
+    @Test func doesNotLetARefreshOverwriteAConnectionMadeMeanwhile() async throws {
+        let stub = StubServer()
+        stub.respond { request in
+            request.url?.path == "/api/v2/oauth/token"
+                ? (200, Self.tokens(access: "wfa_neuf", refresh: "wfr_neuf"))
+                : (200, Self.tokens(access: "wfa_rafraichi", refresh: "wfr_rafraichi"))
+        }
+        stub.hold(path: "/api/v2/auth/refresh")
+
+        let storage = InMemorySessionStorage(stored())
+        let connection = make(storage: storage, stub: stub, now: expiry)
+        connection.restore()
+
+        async let first: ServerSession = connection.validSession()
+        await stub.requestReceived()
+        async let second: ServerSession = connection.validSession()
+        await Task.yield()
+
+        // Une connexion neuve s'installe pendant que le rafraîchissement
+        // attend.
+        let other = try #require(ServerAddress("https://autre.example.com"))
+        let state = try #require(stateParameter(of: connection.beginSignIn(to: other, deviceName: "iPhone")))
+        await connection.completeSignIn(callback: callback(code: "un-code", state: state))
+        #expect(connection.connection?.session.accessToken == "wfa_neuf")
+
+        stub.releaseHeld()
+
+        // Ni l'un ni l'autre ne rapporte la session rafraîchie.
+        var handed: [ServerSession] = []
+        if let session = try? await first { handed.append(session) }
+        if let session = try? await second { handed.append(session) }
+        #expect(handed.isEmpty)
+
+        // Et la connexion neuve est intacte, en mémoire comme au trousseau.
+        #expect(connection.connection?.address == other)
+        #expect(connection.connection?.session.accessToken == "wfa_neuf")
+        #expect(try storage.load()?.session.accessToken == "wfa_neuf")
+    }
+
+    /// Une déconnexion pendant un rafraîchissement laisse l'application
+    /// déconnectée, quels que soient les appelants en attente.
+    ///
+    /// Elle annule la tâche, donc les deux renoncent sur l'annulation : ce
+    /// test ne touche pas les gardes de génération — c'est le précédent qui
+    /// s'en charge — mais il tient la garantie visible.
+    @Test func refusesToHandRefreshedTokensToAJoinerAfterSignOut() async throws {
+        let stub = StubServer()
+        stub.respond(status: 200, body: Self.tokens)
+        stub.hold(path: "/api/v2/auth/refresh")
+        let storage = InMemorySessionStorage(stored())
+        let connection = make(storage: storage, stub: stub, now: expiry)
+        connection.restore()
+
+        async let first: ServerSession = connection.validSession()
+        await stub.requestReceived()
+        async let second: ServerSession = connection.validSession()
+
+        // Laisser le second appel démarrer et rejoindre le rafraîchissement en
+        // cours. Sans cette main rendue, la déconnexion le précède : il trouve
+        // une connexion déjà nulle, renonce aussitôt, et le test passe sans
+        // avoir approché le chemin qu'il prétend couvrir.
+        await Task.yield()
+
+        // Puis lâcher la réponse **avant** de déconnecter. Dans l'autre ordre,
+        // la déconnexion annule la tâche et les deux appelants échouent sur
+        // l'annulation — la garde ne servirait à rien et le test passerait
+        // sans elle. Ici la requête aboutit, et c'est bien la garde qui
+        // retient ce qu'elle rapporte : la déconnexion s'exécute d'un trait
+        // sur le main actor, donc avant toute reprise.
+        stub.releaseHeld()
+        await connection.signOut()
+
+        // Aucun des deux ne repart avec une session.
+        var handed: [ServerSession] = []
+        if let session = try? await first { handed.append(session) }
+        if let session = try? await second { handed.append(session) }
+
+        #expect(handed.isEmpty)
         #expect(connection.isConnected == false)
         #expect(try storage.load() == nil)
     }
@@ -259,6 +374,23 @@ struct ServerConnectionTests {
     // MARK: - Fixtures
 
     private let expiry = Date(timeIntervalSince1970: 10_000)
+
+    private static func tokens(access: String, refresh: String) -> Data {
+        Data("""
+            {
+              "access_token": "\(access)",
+              "refresh_token": "\(refresh)",
+              "token_type": "Bearer",
+              "expires_in": 900,
+              "user": {
+                "id": "6BA7B810-9DAD-11D1-80B4-00C04FD430C8",
+                "username": "listener",
+                "role": "user"
+              },
+              "device_id": "6BA7B811-9DAD-11D1-80B4-00C04FD430C8"
+            }
+            """.utf8)
+    }
 
     private static let tokens = Data("""
         {
