@@ -21,6 +21,7 @@ struct PlaylistsScreen: View {
         NavigationStack(path: $path) {
             content
                 .navigationTitle("Playlists")
+                .sourcePicker()
                 .toolbar {
                     ToolbarItem(placement: .topBarTrailing) {
                         Button("Nouvelle playlist", systemImage: "plus", action: startCreating)

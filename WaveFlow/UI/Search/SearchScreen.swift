@@ -35,6 +35,7 @@ struct SearchScreen: View {
                 resultList(results)
             }
             .navigationTitle("Recherche")
+            .sourcePicker()
             .navigationDestination(for: Album.self) { album in
                 AlbumDetailScreen(albumId: album.id)
             }

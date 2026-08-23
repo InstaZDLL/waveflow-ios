@@ -17,6 +17,7 @@ struct WaveFlowApp: App {
     @State private var libraryStore = LibraryStore(repository: DocumentsMusicRepository())
     @State private var player = PlaybackController()
     @State private var playlistStore = makePlaylistStore()
+    @State private var serverConnection = ServerConnection()
 
     var body: some Scene {
         WindowGroup {
@@ -24,6 +25,7 @@ struct WaveFlowApp: App {
                 .environment(libraryStore)
                 .environment(player)
                 .environment(playlistStore)
+                .environment(serverConnection)
         }
     }
 

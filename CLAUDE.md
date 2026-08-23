@@ -183,6 +183,13 @@ Trois règles du contrat qui ne se devinent pas en lisant le code :
 Documentation de référence dans le dépôt frère `../waveflow-server` : `docs/api-v2-guide.md`,
 `docs/rfcs/RFC-003-waveflow-sync-v2.md` et `docs/rfcs/RFC-004-local-server-reconciliation.md`.
 
+**Côté interface**, la source est un mode et non un filtre : `RootView` montre les onglets locaux
+**ou** l'écran serveur, jamais les deux mêlés, et `MusicSource` vit dans l'environnement pour que
+le sélecteur soit lisible depuis chaque écran racine. La connexion passe par
+`ASWebAuthenticationSession` (`@Environment(\.webAuthenticationSession)`), qui présente le
+navigateur système sans que l'application ait à fournir de contexte — et sans qu'aucun mot de
+passe ne traverse un champ qu'elle contrôle.
+
 ## Projet Xcode
 
 `WaveFlow/` est un **file system synchronized group** : tout `.swift` déposé dedans est pris en

@@ -18,6 +18,9 @@ nonisolated struct AuthClient: Sendable {
     /// sans avoir à le déclarer dans `Info.plist`.
     static let redirectURI = "\(clientId)://auth"
 
+    /// Le schéma seul, que `ASWebAuthenticationSession` intercepte.
+    static let callbackScheme = clientId
+
     let server: ServerAddress
     let session: URLSession
     let now: @Sendable () -> Date

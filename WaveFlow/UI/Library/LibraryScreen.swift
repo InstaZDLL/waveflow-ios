@@ -33,6 +33,7 @@ struct LibraryScreen: View {
                 .listStyle(.plain)
             }
             .navigationTitle("Titres")
+            .sourcePicker()
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Importer", systemImage: "plus", action: requestImport)
