@@ -110,9 +110,6 @@ nonisolated final class StubServer: @unchecked Sendable {
         _ request: URLRequest,
         deliver: @escaping @Sendable (Int, Data) -> Void,
     ) throws -> Bool {
-        let handler = lock.withLock { self.handler }
-        guard let handler else { return false }
-
         let body = try request.readBody()
         let served = ServedRequest(
             url: request.url,
@@ -120,6 +117,15 @@ nonisolated final class StubServer: @unchecked Sendable {
             headers: request.allHTTPHeaderFields ?? [:],
             body: body,
         )
+
+        // Enregistrée et signalée même sans réponse installée : sinon un test
+        // qui aurait oublié la sienne resterait pendu sur [requestReceived]
+        // jusqu'à expiration, au lieu d'échouer en montrant ce qu'il a reçu.
+        let handler = lock.withLock { self.handler }
+        guard let handler else {
+            wake(with: served, held: false)
+            return false
+        }
 
         // Le corps est reposé dans la requête transmise : `URLProtocol` ne
         // laisse qu'un flux, qui vient d'être lu et ne se relit pas. Un
@@ -134,21 +140,33 @@ nonisolated final class StubServer: @unchecked Sendable {
 
         let (status, response) = handler(forwarded)
 
-        let (waiting, isHeld) = lock.withLock {
-            requests.append(served)
-            defer { waiters = [] }
-
-            let isHeld = heldPath == request.url?.path
-            if isHeld { heldDeliveries.append { deliver(status, response) } }
-            return (waiters, isHeld)
+        let isHeld = wake(with: served, held: heldPath == request.url?.path) {
+            deliver(status, response)
         }
-
-        // Réveiller après avoir mis la livraison de côté : le test qui reprend
-        // ici s'attend à ce que la retenue soit déjà en place.
-        waiting.forEach { $0.resume() }
 
         if !isHeld { deliver(status, response) }
         return true
+    }
+
+    /// Enregistre la requête, met la livraison de côté si elle est retenue,
+    /// puis réveille ceux qui l'attendaient — dans cet ordre : le test qui
+    /// reprend s'attend à ce que la retenue soit déjà en place.
+    @discardableResult
+    private func wake(
+        with served: ServedRequest,
+        held: Bool,
+        deliver: (@Sendable () -> Void)? = nil,
+    ) -> Bool {
+        let waiting = lock.withLock {
+            requests.append(served)
+            defer { waiters = [] }
+
+            if held, let deliver { heldDeliveries.append(deliver) }
+            return waiters
+        }
+        waiting.forEach { $0.resume() }
+
+        return held
     }
 }
 

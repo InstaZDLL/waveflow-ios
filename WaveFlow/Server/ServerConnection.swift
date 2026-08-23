@@ -172,7 +172,11 @@ final class ServerConnection {
             try await makeClient(connection.address).refresh(connection.session)
         }
         refreshing = task
-        defer { refreshing = nil }
+        // Seulement si c'est encore la nôtre : une déconnexion suivie d'une
+        // reconnexion peut en avoir lancé une autre pendant l'attente, et
+        // l'effacer laisserait le prochain appelant en démarrer une troisième
+        // — deux rafraîchissements concurrents sur un jeton qui tourne.
+        defer { if refreshing == task { refreshing = nil } }
 
         do {
             // La connexion a pu changer pendant l'attente — déconnexion, ou

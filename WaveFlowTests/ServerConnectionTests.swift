@@ -273,6 +273,12 @@ struct ServerConnectionTests {
         async let first: ServerSession = connection.validSession()
         await stub.requestReceived()
         async let second: ServerSession = connection.validSession()
+
+        // Rendre la main pour que le second appel démarre et rejoigne celui
+        // qui court. Les deux tâches sont isolées au main actor : céder ici
+        // les fait passer avant la reprise du test. Ce n'est pas une barrière
+        // — il n'en existe pas pour observer une jonction — mais les deux
+        // attentes en fin de test la constatent après coup.
         await Task.yield()
 
         // Une connexion neuve s'installe pendant que le rafraîchissement
@@ -290,6 +296,14 @@ struct ServerConnectionTests {
         if let session = try? await second { handed.append(session) }
         #expect(handed.isEmpty)
 
+        // Ces deux attentes prouvent ensemble que le second a bien rejoint le
+        // rafraîchissement en cours, plutôt que d'être arrivé trop tard : une
+        // seule requête est partie, donc il n'en a pas lancé une deuxième, et
+        // s'il avait démarré après la connexion neuve il aurait trouvé une
+        // session valide et l'aurait rendue — `handed` ne serait pas vide.
+        let refreshes = stub.served.filter { $0.url?.path == "/api/v2/auth/refresh" }
+        #expect(refreshes.count == 1)
+
         // Et la connexion neuve est intacte, en mémoire comme au trousseau.
         #expect(connection.connection?.address == other)
         #expect(connection.connection?.session.accessToken == "wfa_neuf")
@@ -299,10 +313,12 @@ struct ServerConnectionTests {
     /// Une déconnexion pendant un rafraîchissement laisse l'application
     /// déconnectée, quels que soient les appelants en attente.
     ///
-    /// Elle annule la tâche, donc les deux renoncent sur l'annulation : ce
-    /// test ne touche pas les gardes de génération — c'est le précédent qui
-    /// s'en charge — mais il tient la garantie visible.
-    @Test func refusesToHandRefreshedTokensToAJoinerAfterSignOut() async throws {
+    /// Elle annule la tâche, donc les appelants renoncent sur l'annulation :
+    /// ce test ne touche pas les gardes de génération — c'est le précédent qui
+    /// s'en charge — et ne prétend pas non plus que le second ait rejoint,
+    /// puisqu'un appelant arrivé trop tard trouverait de toute façon une
+    /// connexion nulle. Il tient la garantie visible, rien de plus.
+    @Test func leavesTheAppSignedOutWhenSignOutRacesARefresh() async throws {
         let stub = StubServer()
         stub.respond(status: 200, body: Self.tokens)
         stub.hold(path: "/api/v2/auth/refresh")
@@ -314,18 +330,6 @@ struct ServerConnectionTests {
         await stub.requestReceived()
         async let second: ServerSession = connection.validSession()
 
-        // Laisser le second appel démarrer et rejoindre le rafraîchissement en
-        // cours. Sans cette main rendue, la déconnexion le précède : il trouve
-        // une connexion déjà nulle, renonce aussitôt, et le test passe sans
-        // avoir approché le chemin qu'il prétend couvrir.
-        await Task.yield()
-
-        // Puis lâcher la réponse **avant** de déconnecter. Dans l'autre ordre,
-        // la déconnexion annule la tâche et les deux appelants échouent sur
-        // l'annulation — la garde ne servirait à rien et le test passerait
-        // sans elle. Ici la requête aboutit, et c'est bien la garde qui
-        // retient ce qu'elle rapporte : la déconnexion s'exécute d'un trait
-        // sur le main actor, donc avant toute reprise.
         stub.releaseHeld()
         await connection.signOut()
 
