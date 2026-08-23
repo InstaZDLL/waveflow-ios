@@ -29,6 +29,7 @@ struct ArtistsScreen: View {
                 .listStyle(.plain)
             }
             .navigationTitle("Artistes")
+            .sourcePicker()
             .navigationDestination(for: Artist.self) { artist in
                 ArtistDetailScreen(artistId: artist.id)
             }

@@ -17,6 +17,10 @@ struct RootView: View {
 
     @State private var selectedTab = Tabs.songs
 
+    /// La source affichée. Ancrée ici : les deux catalogues ne se mêlent pas,
+    /// et changer de source change tout l'écran, pas une liste.
+    @State private var source = MusicSource.local
+
     // Les piles de navigation vivent ici, pas dans les écrans : poser
     // l'accessoire au premier morceau lancé change l'identité du `TabView` et
     // jetterait l'état des vues filles — on se retrouverait ramené à la grille
@@ -34,17 +38,29 @@ struct RootView: View {
 
     var body: some View {
         Group {
-            // Le modificateur est posé — et retiré — plutôt que de laisser le
-            // mini-lecteur se vider : un accessoire au contenu vide réserve
-            // quand même sa capsule au-dessus de la barre d'onglets.
-            if player.currentSong == nil {
-                tabs
-            } else {
-                tabs.tabViewBottomAccessory {
-                    MiniPlayer { showPlayer = true }
+            switch source {
+            case .local:
+                // Le modificateur est posé — et retiré — plutôt que de laisser
+                // le mini-lecteur se vider : un accessoire au contenu vide
+                // réserve quand même sa capsule au-dessus de la barre
+                // d'onglets.
+                if player.currentSong == nil {
+                    tabs
+                } else {
+                    tabs.tabViewBottomAccessory {
+                        MiniPlayer { showPlayer = true }
+                    }
                 }
+
+            case .server:
+                // Pas d'onglets côté serveur tant qu'il n'y a qu'un écran. Le
+                // mini-lecteur non plus : ce qui joue vient forcément de
+                // l'appareil pour l'instant, et l'afficher ici laisserait
+                // croire le contraire.
+                ServerScreen()
             }
         }
+        .environment(\.musicSource, $source)
         .tabBarMinimizeBehavior(.onScrollDown)
         .tint(Color.waveEmerald)
         .environment(\.requestImport) { importing = true }

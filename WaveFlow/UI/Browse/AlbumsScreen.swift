@@ -31,6 +31,7 @@ struct AlbumsScreen: View {
                 }
             }
             .navigationTitle("Albums")
+            .sourcePicker()
             .navigationDestination(for: Album.self) { album in
                 AlbumDetailScreen(albumId: album.id)
             }
